@@ -82,7 +82,7 @@ class AlignConfig(BaseModel):
 class SubtitleConfig(BaseModel):
     font: str = "霞鹜文楷等宽"  # LXGW WenKai Mono：https://github.com/lxgw/LxgwWenKai
     font_scale: float = 0.055
-    max_chars_per_line: int = 20
+    max_chars_per_line: int = 40  # 实际还受画面宽度限制：每行不超过 画面宽 × 90% ÷ 字号
     max_lines: int = 2  # 每屏最多行数：一句译文尽量整句一屏显示，超长时才分屏
     outline: float = 3.0
     box_color: str = "000000"  # 背景框颜色（RGB 十六进制）

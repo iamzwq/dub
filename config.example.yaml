@@ -52,8 +52,8 @@ align:
 subtitle:
   font: 霞鹜文楷等宽            # LXGW WenKai Mono，需先安装：https://github.com/lxgw/LxgwWenKai/releases
   font_scale: 0.055           # 字号 = 画面短边 × 该比例
-  max_chars_per_line: 20      # 每行最多字数（汉字宽度，英文/数字按半个字计）
-  max_lines: 2                # 每屏最多行数：40 字以内的句子整句一屏显示，更长时按标点/词边界均衡分屏
+  max_chars_per_line: 40      # 每行最多字数（汉字宽度，英文/数字按半个字计）；实际还受画面宽度和字号限制，1080p 默认字号下约 29 字
+  max_lines: 2                # 每屏最多行数：一屏放得下的句子整句显示，更长时按标点/词边界均衡分屏
   outline: 3
   box_color: "000000"         # 字幕背景框颜色（RRGGBB）
   box_opacity: 0.9            # 背景框不透明度 0~1：0.9 = 深黑底（透明度 10%），1 = 纯黑，0 = 不加背景框
