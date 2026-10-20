@@ -1,0 +1,65 @@
+# 复制为 config.yaml 后按需修改；所有字段都有默认值，可只写需要改的部分。
+workdir: work                 # 输出目录，每个视频一个子目录 work/<video_id>/
+
+download:
+  cookies: cookies.txt        # 浏览器导出的 Netscape 格式 cookies，用于防限流
+  max_height: 1080
+  retries: 10
+  sleep_requests: 0           # 每次请求间隔秒数，被限流时可设为 1~3
+  ratelimit: ""               # 下载限速，如 "5M"
+  proxy: ""                   # 如 "http://127.0.0.1:7890"，留空则使用系统环境变量
+
+llm:                          # 任意 OpenAI 兼容接口（/v1/chat/completions）
+  base_url: ""                # 如 https://api.example.com/v1；留空则读取 .env 的 LLM_BASE_URL
+  api_key: ""                 # 建议放在 .env 的 LLM_API_KEY，不要写在这里
+  model: ""                   # 留空则读取 .env 的 LLM_MODEL
+  json_mode: true             # 若接口不支持 response_format=json_object，改为 false
+  extra_body: {}              # 透传给接口的额外参数，如 {enable_thinking: false}
+  concurrency: 4
+  temperature: 0.3
+  max_retries: 3
+  timeout: 180
+
+segment:
+  mode: auto                  # auto：有标点 → 按句末标点断句（punct），无标点 → AI 断句（ai）
+  max_gap_seconds: 3          # punct：超过该时长的静音处也断开，避免跨越长空白合并；0 关闭
+  max_sentence_seconds: 15    # 仅 AI 断句：单句最长秒数（同时决定提示词中的单句词数上限）
+  ai_chunk_words: 250
+
+translate:
+  batch_size: 30
+  context_size: 5             # 每批前后各带几句上下文
+  chars_per_second: 4.5       # 中文配音语速估计，用于限制译文字数
+  glossary: glossary.yaml     # 用户术语表（优先级高于自动术语）
+
+tts:
+  voice: zh-CN-YunyangNeural
+  rate: 5                     # 基准语速 +5%
+  max_rate: 30                # 超时时最多提速到 +30%
+  concurrency: 6
+  proxy: ""                   # edge-tts 代理，如 "http://127.0.0.1:7890"
+
+align:
+  shorten_rounds: 2           # 超时时让 LLM 精简译文的最大轮数，0 关闭
+  overflow_tolerance: 0.1     # 超出 ≤ 该秒数时不处理
+  atempo_max: 1.15            # 先用 atempo 压缩的上限
+  max_drift: 1.5              # 有限顺延：最多落后原时间轴的秒数，0 表示不顺延
+  drift_atempo_max: 1.25      # 顺延到上限后继续压缩的上限
+
+subtitle:
+  font: Microsoft YaHei
+  font_scale: 0.055           # 字号 = 画面短边 × 该比例
+  max_chars_per_line: 20
+  outline: 3
+  box_color: "000000"         # 字幕背景框颜色（RRGGBB）
+  box_opacity: 0.9            # 背景框不透明度 0~1：0.9 = 深黑底（透明度 10%），1 = 纯黑，0 = 不加背景框
+  strip_punctuation: true     # 去掉行尾句号、把逗号换成空格
+
+cover:
+  font_path: ""               # 留空自动查找微软雅黑/黑体
+
+compose:
+  encoder: auto               # auto（优先 h264_nvenc）| h264_nvenc | libx264
+  nvenc_cq: 23
+  x264_crf: 21
+  audio_bitrate: 192k

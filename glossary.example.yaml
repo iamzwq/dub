@@ -1,0 +1,5 @@
+# 用户术语表：原文: 译文（大小写不敏感匹配，优先级高于 AI 自动提取的术语）
+# 复制为 glossary.yaml 使用
+Transformer: Transformer
+fine-tuning: 微调
+prompt: 提示词
