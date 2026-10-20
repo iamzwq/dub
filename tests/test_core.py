@@ -340,3 +340,44 @@ def test_display_lines_avoid_short_first_line():
     lines = split_display_lines(text, 20)
     assert "".join(lines).replace(" ", "") == text.replace(" ", "")
     assert all(len(ln) >= 10 for ln in lines[:-1]), lines
+
+
+# ---------------------------------------------------------------- 字幕分屏
+from ytdub.text import balanced_split, display_width, split_screens  # noqa: E402
+
+
+def test_short_sentence_one_screen_two_balanced_lines():
+    screens = split_screens("FreeBSD 的内核和基本系统是在同一个仓库里一起开发的。", 20, 2)
+    assert len(screens) == 1 and len(screens[0]) == 2
+    a, b = (display_width(x) for x in screens[0])
+    assert abs(a - b) <= 4
+    assert "".join(screens[0]).startswith("FreeBSD") and "同一个" in "".join(screens[0])
+
+
+def test_split_prefers_punctuation_and_keeps_words():
+    text = "Linux 发行版则不同，它们把内核和来自许多不同项目的用户态工具组合在一起，所以升级方式和文档风格差别很大。"
+    screens = split_screens(text, 20, 2)
+    assert len(screens) == 2
+    assert screens[1][0].startswith("所以")
+    joined = ["".join(s) for s in screens]
+    assert "".join(joined).replace(" ", "") == text.replace(" ", "")
+    for s in screens:
+        assert all(display_width(ln) <= 20 for ln in s)
+
+
+def test_no_line_starts_with_punct_or_particle():
+    text = "这就是为什么很多工程师在生产环境里更喜欢用 ZFS 和 jail 来做隔离，而不是容器。"
+    for screen in split_screens(text, 20, 2):
+        for ln in screen:
+            assert ln[0] not in "，。、；：里的了"
+
+
+def test_ascii_counts_half_width():
+    assert display_width("ABCD") == 2 and display_width("中文") == 2
+    # 全英文 40 个半角字符 = 20 宽，一行放得下
+    assert balanced_split("a" * 40, 20) == ["a" * 40]
+
+
+def test_ass_multiline_escape():
+    from ytdub.steps.mix import _ass_escape
+    assert _ass_escape("第一行\n第二行{x}") == "第一行\\N第二行｛x｝"

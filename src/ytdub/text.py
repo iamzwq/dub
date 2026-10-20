@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import logging
 import math
 import re
+import unicodedata
+import warnings
 
 NO_SPACE_LANGS = {"zh", "ja", "th", "lo", "km", "my", "yue", "bo"}
 
@@ -137,43 +140,116 @@ def _inseparable(s: str, k: int) -> bool:
     return in_number(s, k - 1) or in_number(s, k)
 
 
-def split_display_lines(text: str, max_chars: int) -> list[str]:
-    """把一句中文译文切成若干不超过 max_chars 的字幕行，优先在标点处断开，不拆开英文单词和数字。"""
+# ---------------------------------------------------------------- 字幕分屏 / 分行
+_LINE_START_FORBIDDEN = SENT_END + CLAUSE_PUNCT + CLOSERS + "》〉"  # 不能出现在行首
+_LINE_START_PARTICLES = set("的了着过里们吗呢吧啊呀么地得上中下内外")  # 依附于前一个词的单字，尽量不放在行首
+_LINE_END_FORBIDDEN = "“‘「『（(【《〈"  # 不能留在行尾
+_ZH_CONJUNCTIONS = {
+    "所以", "但是", "但", "因为", "而且", "如果", "然后", "以及", "并且", "或者", "不过", "可是", "于是",
+    "因此", "同时", "而", "还是", "就是", "比如", "例如", "甚至", "否则", "虽然", "即使", "只要", "只有",
+    "除非", "无论", "不管", "尤其是", "也就是说", "换句话说",
+}
+_jieba = None
+
+
+def display_width(s: str) -> float:
+    """显示宽度（以一个汉字为 1）：全角字符 1，半角字符（英文、数字、空格）0.5。"""
+    return sum(1.0 if unicodedata.east_asian_width(ch) in ("W", "F") else 0.5 for ch in s)
+
+
+def _word_boundaries(text: str) -> tuple[set[int], set[int]]:
+    """用 jieba 分词，返回 (词边界位置, 连词之前的位置)。"""
+    global _jieba
+    if _jieba is None:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")  # jieba 旧代码在新版 Python 中有 SyntaxWarning
+            import jieba
+        jieba.setLogLevel(logging.WARNING)
+        _jieba = jieba
+    bounds: set[int] = set()
+    conj: set[int] = set()
+    pos = 0
+    for word in _jieba.cut(text):
+        if word in _ZH_CONJUNCTIONS:
+            conj.add(pos)
+        pos += len(word)
+        bounds.add(pos)
+    return bounds, conj
+
+
+def _cut_weight(s: str, k: int, bounds: set[int], conj: set[int]) -> float | None:
+    """在 s[k-1] 与 s[k] 之间断开的优先级；None 表示不允许在此断开。"""
+    if not 0 < k < len(s) or _inseparable(s, k):
+        return None
+    a, b = s[k - 1], s[k]
+    if b in _LINE_START_FORBIDDEN or a in _LINE_END_FORBIDDEN:
+        return None
+    if a in SENT_END or (a in CLOSERS and k >= 2 and s[k - 2] in SENT_END):
+        return 3.0
+    if a in CLAUSE_PUNCT:
+        return 2.0
+    if a == " " or b == " ":
+        return 1.2
+    if k in conj:
+        return 1.0
+    if k in bounds:
+        # 以单字助词/方位词开头的行（如“里更喜欢”）读起来别扭，降低优先级
+        if b in _LINE_START_PARTICLES and (k + 1 in bounds or k + 1 == len(s)):
+            return 0.0
+        return 0.4
+    return None  # 词中间
+
+
+def balanced_split(text: str, cap: float) -> list[str]:
+    """
+    把文本切成若干段，每段显示宽度不超过 cap，段数尽量少、各段长度尽量均衡；
+    断开位置优先级：句末标点 > 逗号等 > 空格 > 连词前 > 词边界，不在词、英文单词、数字中间断开。
+    """
     text = text.strip()
-    if zh_len(text) <= max_chars or len(text) <= max_chars:
+    width = display_width(text)
+    if not text or width <= cap or len(text) < 2:
         return [text] if text else []
-    lines: list[str] = []
-    rest = text
-    while rest:
-        if len(rest) <= max_chars:
-            lines.append(rest)
+    n = math.ceil(width / cap)
+    k1 = (n + 1) // 2
+    ideal = width * k1 / n
+    bounds, conj = _word_boundaries(text)
+    prefix = [0.0]
+    for ch in text:
+        prefix.append(prefix[-1] + display_width(ch))
+
+    best: tuple[float, int] | None = None
+    for strict in (True, False):
+        for k in range(1, len(text)):
+            weight = _cut_weight(text, k, bounds, conj)
+            if weight is None:
+                continue
+            left = prefix[k]
+            if strict and (left > k1 * cap or width - left > (n - k1) * cap):
+                continue
+            score = weight - 3 * abs(left - ideal) / cap
+            if best is None or score > best[0]:
+                best = (score, k)
+        if best:
             break
-        window = rest[: max_chars + 1]
-        cut = -1
-        # 只在能让本行至少有半行长度的标点/空格处断开，避免 "FreeBSD" 这类过短的行
-        for i in range(len(window) - 1, max(max_chars // 2, 1) - 1, -1):
-            if window[i] in SENT_END + CLAUSE_PUNCT + " " and not in_number(rest, i):
-                cut = i + 1
-                break
-        if cut <= 0:
-            cut = max_chars
-            while _inseparable(rest, cut):
-                cut -= 1
-            if cut == 0:
-                # 整行都是一个超长单词/数字：向后找到它的结尾
-                cut = max_chars
-                while _inseparable(rest, cut):
-                    cut += 1
-        lines.append(rest[:cut].strip())
-        rest = rest[cut:].strip()
-    # 避免最后一行过短
-    if len(lines) >= 2 and len(lines[-1]) <= 2:
-        tail = lines.pop()
-        lines[-1] = lines[-1] + tail
-    return [ln for ln in lines if ln]
+    if best is None:  # 没有合法断点（如一个超长英文单词）：在最接近理想位置处硬切
+        k = min(range(1, len(text)), key=lambda i: (_inseparable(text, i), abs(prefix[i] - ideal)))
+    else:
+        k = best[1]
+    return balanced_split(text[:k], cap) + balanced_split(text[k:], cap)
+
+
+def split_screens(text: str, max_chars: int, max_lines: int = 2) -> list[list[str]]:
+    """把一句译文切成若干屏字幕，每屏最多 max_lines 行、每行最多 max_chars 个汉字宽。"""
+    screens = balanced_split(text, max_chars * max(max_lines, 1))
+    return [lines for lines in (balanced_split(s, max_chars) for s in screens) if lines]
+
+
+def split_display_lines(text: str, max_chars: int) -> list[str]:
+    """把文本切成若干不超过 max_chars 的字幕行（均衡切分）。"""
+    return balanced_split(text, max_chars)
 
 
 def strip_display_punct(line: str) -> str:
     line = re.sub(r"[，、；：]", " ", line)
-    line = line.rstrip("。，、；：,.;: ")
+    line = re.sub(r"[。，、；：,.;: ]+([”’」』）)]*)$", r"\1", line)  # 行尾标点（含闭引号前的）
     return re.sub(r" {2,}", " ", line).strip()

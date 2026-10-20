@@ -6,7 +6,7 @@ import numpy as np
 from ..context import Context, StepError
 from ..log import count_progress, log
 from ..media import probe, read_audio, write_wav
-from ..text import split_display_lines, strip_display_punct
+from ..text import display_width, split_screens, strip_display_punct
 
 
 def fingerprint(cfg) -> dict:
@@ -23,10 +23,15 @@ def _ass_time(t: float) -> str:
 
 
 def _ass_escape(text: str) -> str:
-    return text.replace("\\", "＼").replace("{", "｛").replace("}", "｝").replace("\n", " ")
+    """转义 ASS 特殊字符；文本中的换行转为 ASS 换行符 \\N。"""
+    lines = text.split("\n")
+    return r"\N".join(ln.replace("\\", "＼").replace("{", "｛").replace("}", "｝") for ln in lines)
 
 
-def subtitle_events(timeline: list[dict], max_chars: int, strip_punct: bool) -> list[tuple[float, float, str]]:
+def subtitle_events(
+    timeline: list[dict], max_chars: int, strip_punct: bool, max_lines: int = 2
+) -> list[tuple[float, float, str]]:
+    """每句译文切成若干屏（每屏最多 max_lines 行，行间用 \\n 分隔），按显示宽度分配该句的显示时间。"""
     events: list[tuple[float, float, str]] = []
     for i, e in enumerate(timeline):
         text = e["zh"].strip()
@@ -38,16 +43,17 @@ def subtitle_events(timeline: list[dict], max_chars: int, strip_punct: bool) -> 
             start, end = e["start"], e["end"]
         nxt = timeline[i + 1]["play_start"] if i + 1 < len(timeline) else end + 0.5
         end = max(end, min(nxt, end + 0.5))
-        lines = split_display_lines(text, max_chars)
+        screens = split_screens(text, max_chars, max_lines)
         if strip_punct:
-            lines = [ln for ln in (strip_display_punct(x) for x in lines) if ln]
-        if not lines:
+            screens = [s for s in ([ln for ln in (strip_display_punct(x) for x in sc) if ln] for sc in screens) if s]
+        if not screens:
             continue
-        total = sum(len(x) for x in lines)
+        widths = [max(display_width("".join(sc)), 0.5) for sc in screens]
+        total = sum(widths)
         t = start
-        for ln in lines:
-            d = (end - start) * len(ln) / total
-            events.append((t, t + d, ln))
+        for sc, w in zip(screens, widths):
+            d = (end - start) * w / total
+            events.append((t, t + d, "\n".join(sc)))
             t += d
     return events
 
@@ -108,9 +114,9 @@ def run(ctx: Context) -> None:
 
     # 字幕
     max_chars = max_chars_for(width, height, cfg.subtitle)
-    events = subtitle_events(timeline, max_chars, cfg.subtitle.strip_punctuation)
+    events = subtitle_events(timeline, max_chars, cfg.subtitle.strip_punctuation, cfg.subtitle.max_lines)
     ws.path("zh.ass").write_text(build_ass(events, width, height, cfg.subtitle), encoding="utf-8-sig")
-    log.info("字幕：%d 条（每行最多 %d 字）→ zh.ass", len(events), max_chars)
+    log.info("字幕：%d 屏（每屏最多 %d 行、每行最多 %d 字）→ zh.ass", len(events), cfg.subtitle.max_lines, max_chars)
 
     # 配音轨
     sr = None
