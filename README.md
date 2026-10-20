@@ -65,6 +65,17 @@ uv run ytdub voices                                           # 能列出音色�
 
 LLM 支持任意 OpenAI 兼容接口，只需三项配置：`base_url`、`api_key`、`model`。可写在 `.env`（`LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL`），也可写在 `config.yaml` 的 `llm` 段（优先）。本地服务（localhost）可不填 api_key。若接口不支持 JSON 模式，设置 `llm.json_mode: false`。
 
+**使用推理模型时（GLM、豆包 Seed、DeepSeek-R1、OpenAI o 系列等）强烈建议设置 `reasoning_effort`：**
+
+```yaml
+llm:
+  reasoning_effort: minimal
+```
+
+推理模型默认会先长时间“思考”。实测火山方舟 `glm-5.3-flash` 翻译 150 句：默认耗时 11 分钟、输出 16.6 万 token（96% 是思考内容）；设为 `minimal` 后只需 32 秒、输出 4.9 千 token，译文质量没有明显差别。若接口不支持该参数（返回 400 参数错误），留空即可。
+
+请求使用流式传输，`llm.timeout` 表示“连续多少秒收不到数据”才算超时，模型思考或生成时间再长也不会被误判超时。认证失败、模型不存在、参数不支持等错误会立即报错，不会反复重试。
+
 ## 使用
 
 ```powershell

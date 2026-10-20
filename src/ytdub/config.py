@@ -15,6 +15,7 @@ class LLMConfig(BaseModel):
     api_key: str = ""
     model: str = ""
     json_mode: bool = True
+    reasoning_effort: str = ""  # 推理模型的思考强度（minimal/low/medium/high），留空不发送该参数
     extra_body: dict = Field(default_factory=dict)
     concurrency: int = 4
     temperature: float = 0.3

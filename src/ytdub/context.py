@@ -34,6 +34,12 @@ class Context:
 
     def close(self) -> None:
         if self._loop is not None:
+            # Ctrl+C 中断时可能还有未完成的请求任务：先全部取消，避免它们在客户端关闭后继续重试
+            pending = [t for t in asyncio.all_tasks(self._loop) if not t.done()]
+            for t in pending:
+                t.cancel()
+            if pending:
+                self._loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
             if self._llm is not None:
                 self._loop.run_until_complete(self._llm.close())
             self._loop.close()

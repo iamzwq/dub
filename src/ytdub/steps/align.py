@@ -6,7 +6,7 @@ import json
 import math
 
 from ..context import Context, StepError
-from ..llm import LLM, LLMError
+from ..llm import LLM, LLMError, LLMFatalError
 from ..log import count_progress, log
 from ..media import atempo
 from ..models import Sentence
@@ -99,6 +99,8 @@ async def _run(ctx: Context) -> None:
             target = max(2, math.floor(zh_len(text) * slot / dur * 0.95))
             try:
                 new_text = await _shorten(llm, e["src"], text, target)
+            except LLMFatalError as err:
+                raise StepError(str(err)) from err
             except LLMError as err:
                 log.debug("精简失败 #%d：%s", e["id"], err)
                 break

@@ -160,6 +160,19 @@ def _download_thumbnail(ydl, ctx: Context, info: dict) -> None:
 
 
 def run(ctx: Context) -> None:
+    from yt_dlp.utils import DownloadError, ExtractorError
+
+    try:
+        _run(ctx)
+    except (DownloadError, ExtractorError) as e:
+        msg = str(e).replace("ERROR: ", "").strip()
+        hint = ""
+        if "Sign in" in msg or "bot" in msg or "cookies" in msg.lower():
+            hint = "（YouTube 要求登录验证：请导出浏览器 cookies.txt 并放到项目根目录，或用 --cookies 指定）"
+        raise StepError(f"下载失败：{msg}{hint}") from e
+
+
+def _run(ctx: Context) -> None:
     import yt_dlp
 
     ws, cfg = ctx.ws, ctx.cfg

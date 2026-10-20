@@ -14,11 +14,13 @@ llm:                          # 任意 OpenAI 兼容接口（/v1/chat/completion
   api_key: ""                 # 建议放在 .env 的 LLM_API_KEY，不要写在这里
   model: ""                   # 留空则读取 .env 的 LLM_MODEL
   json_mode: true             # 若接口不支持 response_format=json_object，改为 false
-  extra_body: {}              # 透传给接口的额外参数，如 {enable_thinking: false}
+  reasoning_effort: ""        # 推理模型（GLM、豆包 Seed、DeepSeek-R1、o 系列等）建议设为 minimal：
+                              # 翻译不需要长时间思考，可快数倍并大幅节省 token；接口不支持该参数时留空
+  extra_body: {}              # 透传额外参数，如火山方舟豆包关闭思考 {thinking: {type: disabled}}
   concurrency: 4
   temperature: 0.3
   max_retries: 3
-  timeout: 180
+  timeout: 180                # 连续多少秒收不到任何数据视为超时（流式请求，与总耗时无关）
 
 segment:
   mode: auto                  # auto：有标点 → 按句末标点断句（punct），无标点 → AI 断句（ai）

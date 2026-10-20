@@ -9,7 +9,7 @@ from pathlib import Path
 import yaml
 
 from ..context import Context, StepError
-from ..llm import LLM, LLMError
+from ..llm import LLM, LLMError, LLMFatalError
 from ..log import count_progress, log
 from ..models import Sentence
 from ..prompts import SUMMARY_SYSTEM, TRANSLATE_SYSTEM
@@ -129,6 +129,8 @@ async def _translate_all(ctx: Context, llm: LLM, sentences: list[Sentence], lang
         log.info("生成视频摘要与术语表…")
         try:
             titles = await _summarize(llm, sentences, meta)
+        except LLMFatalError:
+            raise
         except LLMError as e:
             log.warning("摘要/术语生成失败，继续翻译：%s", e)
             title = meta.get("title", "")
@@ -198,11 +200,13 @@ async def _translate_all(ctx: Context, llm: LLM, sentences: list[Sentence], lang
         try:
             out = await llm.chat_json(system, json.dumps(payload, ensure_ascii=False), validate=validate,
                                       label=f"翻译 #{batch[0].id}-{batch[-1].id}")
+        except LLMFatalError:
+            raise
         except LLMError:
             if len(batch) == 1:
                 raise
             mid = len(batch) // 2
-            log.debug("批次 #%d-%d 失败，拆分重试", batch[0].id, batch[-1].id)
+            log.warning("批次 #%d-%d 多次失败，拆成两半重试", batch[0].id, batch[-1].id)
             await translate_batch(batch[:mid])
             await translate_batch(batch[mid:])
             return

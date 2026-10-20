@@ -5,7 +5,7 @@ import json
 from difflib import SequenceMatcher
 
 from ..context import Context, StepError
-from ..llm import LLM, LLMError
+from ..llm import LLM, LLMError, LLMFatalError
 from ..log import count_progress, log
 from ..models import Sentence, Token
 from ..prompts import SEGMENT_SYSTEM
@@ -148,6 +148,8 @@ async def _segment_ai(llm: LLM, tokens: list[Token], lang: str, ctx: Context) ->
             is_last = j >= n
             try:
                 result = await _segment_chunk(llm, chunk, tok_units[i:j], lang, max_words)
+            except LLMFatalError as e:
+                raise StepError(str(e)) from e
             except LLMError as e:
                 log.warning("AI 断句失败，该段回退为按停顿断句：%s", e)
                 for g in split_long(chunk, cfg.max_sentence_seconds):
