@@ -32,6 +32,8 @@ winget install Gyan.FFmpeg        # full build，自带 libass（烧录字幕）
 
 可选：安装 [deno](https://deno.com/)（`winget install DenoLand.Deno`）。yt-dlp 会自动检测并用它解析 YouTube 的 JS 验证，部分视频能获得更完整的格式；所需的 `yt-dlp-ejs` 脚本已随 `yt-dlp[default]` 依赖安装。不装 deno 也能用，只会提示一次警告并下载可用的最佳格式。
 
+字幕默认字体为 **霞鹜文楷等宽**（LXGW WenKai Mono）：从 [LxgwWenKai Releases](https://github.com/lxgw/LxgwWenKai/releases) 下载 `LXGWWenKaiMono-Regular.ttf`，双击安装（为当前用户安装即可）。未安装时会自动使用系统字体（Windows 下中文为微软雅黑），字幕照常显示；也可在 `config.yaml` 的 `subtitle.font` 改用其他字体。
+
 **2. 获取项目代码**
 
 复制整个项目目录（不需要 `.venv`、`work`），或从 git 仓库 clone。注意 `uv.lock` 要一起复制，它锁定了所有依赖的版本。
@@ -65,14 +67,15 @@ uv run ytdub voices                                           # 能列出音色�
 
 LLM 支持任意 OpenAI 兼容接口，只需三项配置：`base_url`、`api_key`、`model`。可写在 `.env`（`LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL`），也可写在 `config.yaml` 的 `llm` 段（优先）。本地服务（localhost）可不填 api_key。若接口不支持 JSON 模式，设置 `llm.json_mode: false`。
 
-**使用推理模型时（GLM、豆包 Seed、DeepSeek-R1、OpenAI o 系列等）强烈建议设置 `reasoning_effort`：**
+**推理模型的思考默认已关闭/降到最低**（GLM、豆包 Seed、DeepSeek-R1、OpenAI o 系列等）：
 
 ```yaml
 llm:
-  reasoning_effort: minimal
+  reasoning_effort: minimal                  # 默认值
+  extra_body: {thinking: {type: disabled}}   # 默认值
 ```
 
-推理模型默认会先长时间“思考”。实测火山方舟 `glm-5.3-flash` 翻译 150 句：默认耗时 11 分钟、输出 16.6 万 token（96% 是思考内容）；设为 `minimal` 后只需 32 秒、输出 4.9 千 token，译文质量没有明显差别。若接口不支持该参数（返回 400 参数错误），留空即可。
+推理模型默认会先长时间“思考”。实测火山方舟 `glm-5.3-flash` 翻译 150 句：开启思考耗时 11 分钟、输出 16.6 万 token（96% 是思考内容）；`reasoning_effort: minimal` 只需 32 秒、输出 4.9 千 token，译文质量没有明显差别。不同接口支持的参数不同（如方舟的 glm 不支持 `thinking: disabled`，豆包两者都支持）：接口明确拒绝其中某个参数时，程序会自动去掉它并重试，本次运行内不再发送。如需让模型思考，设置 `reasoning_effort: ""` 和 `extra_body: {}`。
 
 请求使用流式传输，`llm.timeout` 表示“连续多少秒收不到数据”才算超时，模型思考或生成时间再长也不会被误判超时。认证失败、模型不存在、参数不支持等错误会立即报错，不会反复重试。
 

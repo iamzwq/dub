@@ -150,7 +150,8 @@ def split_display_lines(text: str, max_chars: int) -> list[str]:
             break
         window = rest[: max_chars + 1]
         cut = -1
-        for i in range(len(window) - 1, max(len(window) // 3, 1) - 1, -1):
+        # 只在能让本行至少有半行长度的标点/空格处断开，避免 "FreeBSD" 这类过短的行
+        for i in range(len(window) - 1, max(max_chars // 2, 1) - 1, -1):
             if window[i] in SENT_END + CLAUSE_PUNCT + " " and not in_number(rest, i):
                 cut = i + 1
                 break

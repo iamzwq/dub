@@ -333,3 +333,10 @@ def test_ass_box_style():
     assert fields[6] == "&H19000000" and fields[15] == "4"
     style = next(ln for ln in build_ass([], 1280, 720, SubtitleConfig(box_opacity=0)).splitlines() if ln.startswith("Style:"))
     assert style.split(",")[15] == "1"
+
+
+def test_display_lines_avoid_short_first_line():
+    text = "FreeBSD 的内核和基本系统在同一个仓库里开发，版本号是14.2"
+    lines = split_display_lines(text, 20)
+    assert "".join(lines).replace(" ", "") == text.replace(" ", "")
+    assert all(len(ln) >= 10 for ln in lines[:-1]), lines

@@ -15,8 +15,10 @@ class LLMConfig(BaseModel):
     api_key: str = ""
     model: str = ""
     json_mode: bool = True
-    reasoning_effort: str = ""  # 推理模型的思考强度（minimal/low/medium/high），留空不发送该参数
-    extra_body: dict = Field(default_factory=dict)
+    # 关闭/减少推理模型的思考：翻译不需要长时间思考，可快数倍并大幅节省 token。
+    # 接口明确不支持其中某个参数时会自动去掉；设为 "" / {} 则不发送。
+    reasoning_effort: str = "minimal"  # minimal/low/medium/high
+    extra_body: dict = Field(default_factory=lambda: {"thinking": {"type": "disabled"}})
     concurrency: int = 4
     temperature: float = 0.3
     max_retries: int = 3
@@ -78,13 +80,13 @@ class AlignConfig(BaseModel):
 
 
 class SubtitleConfig(BaseModel):
-    font: str = "Microsoft YaHei"
+    font: str = "霞鹜文楷等宽"  # LXGW WenKai Mono：https://github.com/lxgw/LxgwWenKai
     font_scale: float = 0.055
     max_chars_per_line: int = 20
     outline: float = 3.0
     box_color: str = "000000"  # 背景框颜色（RGB 十六进制）
     box_opacity: float = 0.90  # 背景框不透明度 0~1（0.9 = 透明度 10%），0 表示不加背景框
-    margin_scale: float = 0.06
+    margin_scale: float = 0.01  # 字幕距底部 = 画面高度 × 该比例
     strip_punctuation: bool = True
 
 

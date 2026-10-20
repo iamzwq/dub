@@ -121,27 +121,21 @@ class LLM:
     ) -> Any:
         """调用 LLM 并解析 JSON；validate 抛出异常时视为失败并重试。"""
         last_err: Exception | None = None
-        kwargs: dict[str, Any] = dict(
-            model=self.model,
-            messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
-            temperature=self.temperature,
-        )
-        if self.json_mode:
-            kwargs["response_format"] = {"type": "json_object"}
-        if self.reasoning_effort:
-            kwargs["reasoning_effort"] = self.reasoning_effort
-        if self.extra_body:
-            kwargs["extra_body"] = self.extra_body
-        for attempt in range(1, self.max_retries + 1):
+        attempt = 0
+        while attempt < self.max_retries:
+            attempt += 1
             try:
                 async with self.semaphore:
-                    content = await self._complete(kwargs)
+                    content = await self._complete(self._request_kwargs(system, user))
                 self.calls += 1
                 data = extract_json(content)
                 return validate(data) if validate else data
             except (AuthenticationError, PermissionDeniedError, NotFoundError) as e:
                 raise LLMFatalError(f"LLM 请求被拒绝（请检查 base_url / api_key / model）：{_short(e)}") from e
             except BadRequestError as e:
+                if self._drop_unsupported(e):
+                    attempt -= 1
+                    continue
                 if any(h in str(e).lower() for h in _CONTENT_FILTER_HINTS):
                     raise LLMError(f"LLM 拒绝了该内容 {label}：{_short(e)}") from e
                 raise LLMFatalError(
@@ -155,6 +149,35 @@ class LLM:
                                 label, attempt, self.max_retries, _short(e), wait)
                     await asyncio.sleep(wait)
         raise LLMError(f"LLM 调用失败 {label}：{_short(last_err) if last_err else ''}")
+
+    def _request_kwargs(self, system: str, user: str) -> dict[str, Any]:
+        kwargs: dict[str, Any] = dict(
+            model=self.model,
+            messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+            temperature=self.temperature,
+        )
+        if self.json_mode:
+            kwargs["response_format"] = {"type": "json_object"}
+        if self.reasoning_effort:
+            kwargs["reasoning_effort"] = self.reasoning_effort
+        if self.extra_body:
+            kwargs["extra_body"] = self.extra_body
+        return kwargs
+
+    def _drop_unsupported(self, e: BadRequestError) -> bool:
+        """接口明确拒绝 reasoning_effort 或 extra_body 中某个参数时，去掉该参数（本次运行内不再发送），返回是否需要重试。"""
+        msg = str(e)
+        dropped: list[str] = []
+        if self.reasoning_effort and "reasoning_effort" in msg:
+            self.reasoning_effort = ""
+            dropped.append("reasoning_effort")
+        for key in list(self.extra_body or {}):
+            if key in msg and key != "reasoning_effort":
+                self.extra_body = {k: v for k, v in self.extra_body.items() if k != key}
+                dropped.append(f"extra_body.{key}")
+        if dropped:
+            log.info("该模型不支持参数 %s，已自动去掉后重试", "、".join(dropped))
+        return bool(dropped)
 
     def usage(self) -> dict:
         return {

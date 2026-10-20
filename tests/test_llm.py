@@ -74,12 +74,37 @@ def test_fatal_errors_fail_fast(monkeypatch, status):
 
     def handler(request: httpx.Request) -> httpx.Response:
         calls.append(1)
-        return httpx.Response(status, json={"error": {"message": "thinking.type disabled is not supported"}})
+        return httpx.Response(status, json={"error": {"message": "model glm-x does not exist or is invalid"}})
 
     llm = _make_llm(handler, monkeypatch)
     with pytest.raises(LLMFatalError):
         asyncio.run(llm.chat_json("sys", "hi"))
     assert len(calls) == 1
+
+
+def test_unsupported_default_params_are_dropped(monkeypatch):
+    """默认的 thinking/reasoning_effort 被接口拒绝时，自动去掉后重试（如火山方舟 glm 不支持 thinking.disabled）。"""
+    bodies = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        bodies.append(body)
+        if "thinking" in body:
+            return httpx.Response(400, json={"error": {"code": "InvalidParameter",
+                                                       "message": "thinking.type `disabled` is not supported by this model"}})
+        if "reasoning_effort" in body:
+            return httpx.Response(400, json={"error": {"message": "Unsupported parameter: 'reasoning_effort'"}})
+        return httpx.Response(200, content=_sse([_chunk({"content": '{"ok": 1}'})]),
+                              headers={"content-type": "text/event-stream"})
+
+    llm = _make_llm(handler, monkeypatch)  # 使用默认配置
+    assert bodies == [] and llm.reasoning_effort == "minimal" and llm.extra_body == {"thinking": {"type": "disabled"}}
+    assert asyncio.run(llm.chat_json("sys", "hi")) == {"ok": 1}
+    assert len(bodies) == 3
+    assert llm.reasoning_effort == "" and not llm.extra_body
+    # 之后的请求不再发送被拒绝的参数
+    asyncio.run(llm.chat_json("sys", "hi"))
+    assert len(bodies) == 4 and "thinking" not in bodies[-1] and "reasoning_effort" not in bodies[-1]
 
 
 def test_content_filter_is_not_fatal(monkeypatch):
