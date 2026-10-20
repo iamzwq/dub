@@ -30,6 +30,8 @@ winget install Gyan.FFmpeg        # full build，自带 libass（烧录字幕）
 
 也可以用 scoop：`scoop install uv ffmpeg`。不需要单独安装 Python：uv 会按 `.python-version` 自动下载 Python 3.12。
 
+可选：安装 [deno](https://deno.com/)（`winget install DenoLand.Deno`）。yt-dlp 会自动检测并用它解析 YouTube 的 JS 验证，部分视频能获得更完整的格式；所需的 `yt-dlp-ejs` 脚本已随 `yt-dlp[default]` 依赖安装。不装 deno 也能用，只会提示一次警告并下载可用的最佳格式。
+
 **2. 获取项目代码**
 
 复制整个项目目录（不需要 `.venv`、`work`），或从 git 仓库 clone。注意 `uv.lock` 要一起复制，它锁定了所有依赖的版本。
