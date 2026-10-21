@@ -57,7 +57,7 @@ class SegmentConfig(BaseModel):
 class TranslateConfig(BaseModel):
     batch_size: int = 30
     context_size: int = 5
-    chars_per_second: float = 4.5
+    chars_per_second: float = 5
     glossary: str = "glossary.yaml"
 
 

@@ -32,7 +32,7 @@ segment:
 translate:
   batch_size: 30
   context_size: 5             # 每批前后各带几句上下文
-  chars_per_second: 4.5       # 中文配音语速估计，用于限制译文字数
+  chars_per_second: 5         # 中文配音语速估计，用于限制译文字数
   glossary: glossary.yaml     # 用户术语表（优先级高于自动术语）
 
 tts:

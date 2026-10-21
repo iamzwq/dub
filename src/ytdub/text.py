@@ -250,6 +250,6 @@ def split_display_lines(text: str, max_chars: int) -> list[str]:
 
 
 def strip_display_punct(line: str) -> str:
-    line = re.sub(r"[，、；：]", " ", line)
+    # line = re.sub(r"[，、；：]", " ", line)
     line = re.sub(r"[。，、；：,.;: ]+([”’」』）)]*)$", r"\1", line)  # 行尾标点（含闭引号前的）
     return re.sub(r" {2,}", " ", line).strip()
