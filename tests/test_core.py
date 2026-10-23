@@ -381,3 +381,35 @@ def test_ascii_counts_half_width():
 def test_ass_multiline_escape():
     from ytdub.steps.mix import _ass_escape
     assert _ass_escape("第一行\n第二行{x}") == "第一行\\N第二行｛x｝"
+
+def test_punct_split_single_lines():
+    from ytdub.text import punct_split
+
+    text = "FreeBSD 的内核和基本系统在一起开发，版本号会同步发布。"
+    pieces = punct_split(text, 20)
+    assert pieces == ["FreeBSD 的内核和基本系统在一起开发，", "版本号会同步发布。"]
+    assert punct_split("FreeBSD 的内核和基本系统是在同一个仓库里一起开发的。", 20) is None  # 无标点断点
+    assert punct_split(text, 20, min_width=12) is None  # 第二段太短
+    assert punct_split("苹果、香蕉、橘子、葡萄、西瓜、草莓、芒果、菠萝、樱桃、柠檬、桃子", 20) is None  # 不在顿号处分屏
+
+
+def test_split_screens_prefer_single_line():
+    text = "FreeBSD 的内核和基本系统在一起开发，版本号会同步发布。"
+    default = split_screens(text, 20, 2)
+    assert len(default) == 1 and len(default[0]) == 2
+    assert split_screens(text, 20, 2, min_split_width=0) == [
+        ["FreeBSD 的内核和基本系统在一起开发，"], ["版本号会同步发布。"]
+    ]
+
+
+def test_subtitle_events_prefer_single_line():
+    text = "FreeBSD 的内核和基本系统在一起开发，版本号会同步发布。"
+    tl = [{"zh": text, "play_start": 0.0, "play_end": 6.0, "start": 0.0, "end": 6.0, "duration": 6.0}]
+    ev = subtitle_events(tl, 20, True, 2, prefer_single_line=True)
+    assert [e[2] for e in ev] == ["FreeBSD 的内核和基本系统在一起开发", "版本号会同步发布"]
+    assert ev[0][0] == 0.0 and abs(ev[-1][1] - 6.5) < 1e-6 and ev[0][1] == ev[1][0]
+    # 关闭、语速过快、每屏太短时仍一屏两行
+    assert len(subtitle_events(tl, 20, True, 2, prefer_single_line=False)) == 1
+    fast = [dict(tl[0], play_end=2.0, end=2.0, duration=2.0)]
+    assert len(subtitle_events(fast, 20, True, 2, prefer_single_line=True)) == 1
+    assert len(subtitle_events(tl, 20, True, 2, prefer_single_line=True, min_screen_duration=3.0)) == 1

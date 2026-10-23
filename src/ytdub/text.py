@@ -238,10 +238,64 @@ def balanced_split(text: str, cap: float) -> list[str]:
     return balanced_split(text[:k], cap) + balanced_split(text[k:], cap)
 
 
-def split_screens(text: str, max_chars: int, max_lines: int = 2) -> list[list[str]]:
-    """把一句译文切成若干屏字幕，每屏最多 max_lines 行、每行最多 max_chars 个汉字宽。"""
-    screens = balanced_split(text, max_chars * max(max_lines, 1))
-    return [lines for lines in (balanced_split(s, max_chars) for s in screens) if lines]
+def punct_split(text: str, max_chars: float, min_width: float = 0.0) -> list[str] | None:
+    """
+    只在句末标点、逗号/分号/冒号处把文本切成若干单行（顿号除外），每段宽度在 [min_width, max_chars] 内，
+    段数最少、长度尽量均衡；切不出至少两段时返回 None。
+    """
+    text = text.strip()
+    n = len(text)
+    if n < 2:
+        return None
+    cuts = [0]
+    for k in range(1, n):
+        weight = _cut_weight(text, k, set(), set())
+        if weight is not None and weight >= 2.0 and text[k - 1] != "、":
+            cuts.append(k)
+    cuts.append(n)
+    # best[j]：切到 cuts[j] 为止的 (段数, 宽度平方和, 上一切点下标)
+    best: list[tuple[int, float, int] | None] = [None] * len(cuts)
+    best[0] = (0, 0.0, -1)
+    for j in range(1, len(cuts)):
+        for i in range(j):
+            if best[i] is None:
+                continue
+            w = display_width(text[cuts[i]:cuts[j]].strip())
+            if w > max_chars or w < min_width:
+                continue
+            cand = (best[i][0] + 1, best[i][1] + w * w, i)
+            if best[j] is None or cand[:2] < best[j][:2]:
+                best[j] = cand
+    if best[-1] is None or best[-1][0] < 2:
+        return None
+    pieces: list[str] = []
+    j = len(cuts) - 1
+    while j > 0:
+        i = best[j][2]
+        pieces.append(text[cuts[i]:cuts[j]].strip())
+        j = i
+    return pieces[::-1]
+
+
+def split_screens(
+    text: str, max_chars: int, max_lines: int = 2, min_split_width: float | None = None
+) -> list[list[str]]:
+    """
+    把一句译文切成若干屏字幕，每屏最多 max_lines 行、每行最多 max_chars 个汉字宽。
+    给出 min_split_width 时，需要换行的屏若能在标点处切成若干单行（每段宽度 ≥ min_split_width），
+    则改为分屏显示，每屏一行。
+    """
+    out: list[list[str]] = []
+    for s in balanced_split(text, max_chars * max(max_lines, 1)):
+        lines = balanced_split(s, max_chars)
+        if len(lines) > 1 and min_split_width is not None:
+            pieces = punct_split(s, max_chars, min_split_width)
+            if pieces:
+                out.extend([p] for p in pieces)
+                continue
+        if lines:
+            out.append(lines)
+    return out
 
 
 def split_display_lines(text: str, max_chars: int) -> list[str]:

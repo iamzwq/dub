@@ -29,9 +29,19 @@ def _ass_escape(text: str) -> str:
 
 
 def subtitle_events(
-    timeline: list[dict], max_chars: int, strip_punct: bool, max_lines: int = 2
+    timeline: list[dict],
+    max_chars: int,
+    strip_punct: bool,
+    max_lines: int = 2,
+    prefer_single_line: bool = False,
+    min_screen_duration: float = 1.0,
+    max_cps: float = 8.0,
 ) -> list[tuple[float, float, str]]:
-    """每句译文切成若干屏（每屏最多 max_lines 行，行间用 \\n 分隔），按显示宽度分配该句的显示时间。"""
+    """
+    每句译文切成若干屏（每屏最多 max_lines 行，行间用 \\n 分隔），按显示宽度分配该句的显示时间。
+    prefer_single_line：需要换行的屏若能在标点处切开、每屏显示不短于 min_screen_duration 秒，
+    且该句阅读速度不超过 max_cps（汉字宽/秒），则改为一行一屏。
+    """
     events: list[tuple[float, float, str]] = []
     for i, e in enumerate(timeline):
         text = e["zh"].strip()
@@ -43,7 +53,12 @@ def subtitle_events(
             start, end = e["start"], e["end"]
         nxt = timeline[i + 1]["play_start"] if i + 1 < len(timeline) else end + 0.5
         end = max(end, min(nxt, end + 0.5))
-        screens = split_screens(text, max_chars, max_lines)
+        min_split_width = None
+        if prefer_single_line and end > start:
+            cps = display_width(text) / (end - start)
+            if cps <= max_cps:
+                min_split_width = cps * min_screen_duration
+        screens = split_screens(text, max_chars, max_lines, min_split_width)
         if strip_punct:
             screens = [s for s in ([ln for ln in (strip_display_punct(x) for x in sc) if ln] for sc in screens) if s]
         if not screens:
@@ -114,7 +129,11 @@ def run(ctx: Context) -> None:
 
     # 字幕
     max_chars = max_chars_for(width, height, cfg.subtitle)
-    events = subtitle_events(timeline, max_chars, cfg.subtitle.strip_punctuation, cfg.subtitle.max_lines)
+    sub = cfg.subtitle
+    events = subtitle_events(
+        timeline, max_chars, sub.strip_punctuation, sub.max_lines,
+        sub.prefer_single_line, sub.min_screen_duration, sub.max_cps,
+    )
     ws.path("zh.ass").write_text(build_ass(events, width, height, cfg.subtitle), encoding="utf-8-sig")
     log.info("字幕：%d 屏（每屏最多 %d 行、每行最多 %d 字）→ zh.ass", len(events), cfg.subtitle.max_lines, max_chars)
 

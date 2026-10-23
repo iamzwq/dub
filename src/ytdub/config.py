@@ -84,6 +84,9 @@ class SubtitleConfig(BaseModel):
     font_scale: float = 0.055
     max_chars_per_line: int = 40  # 实际还受画面宽度限制：每行不超过 画面宽 × 90% ÷ 字号
     max_lines: int = 2  # 每屏最多行数：一句译文尽量整句一屏显示，超长时才分屏
+    prefer_single_line: bool = True  # 需要换行时，若能在标点处切开且时间够读，改为一行一屏
+    min_screen_duration: float = 1.0  # 一行一屏时，每屏最短显示秒数
+    max_cps: float = 8.0  # 一行一屏时，该句阅读速度上限（汉字宽/秒），更快则仍一屏多行
     outline: float = 3.0
     box_color: str = "000000"  # 背景框颜色（RGB 十六进制）
     box_opacity: float = 0.90  # 背景框不透明度 0~1（0.9 = 透明度 10%），0 表示不加背景框
