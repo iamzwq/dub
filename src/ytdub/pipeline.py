@@ -100,7 +100,7 @@ def print_summary(ws: Workspace, elapsed: float, last: int) -> None:
             f"对齐：超时 {al['overflow_before']} 句 → 提速 {al['rate_adjusted']}、精简 {al['shortened']}、"
             f"atempo {al['atempo']}（最大 {al['max_tempo']:.2f}x）、顺延 {al['drifted']}（最大 {al['max_drift']:.2f}s）"
         )
-    out = ws.path("output.mp4")
+    out = Path((report.get("compose") or {}).get("output") or ws.path("output.mp4"))
     if out.exists() and last == len(STEPS) - 1:
         lines.append(f"[bold green]输出视频：{out}")
     for ln in lines:

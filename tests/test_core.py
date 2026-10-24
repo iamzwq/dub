@@ -413,3 +413,23 @@ def test_subtitle_events_prefer_single_line():
     fast = [dict(tl[0], play_end=2.0, end=2.0, duration=2.0)]
     assert len(subtitle_events(fast, 20, True, 2, prefer_single_line=True)) == 1
     assert len(subtitle_events(tl, 20, True, 2, prefer_single_line=True, min_screen_duration=3.0)) == 1
+
+
+def test_safe_filename_and_output_name(tmp_path):
+    from ytdub.steps.compose import build_command, output_name, safe_filename
+    from ytdub.config import Config
+    from ytdub.workspace import Workspace
+
+    assert safe_filename('AI 会取代程序员吗？: "真相" / 未来') == 'AI 会取代程序员吗？ 真相 未来'
+    assert safe_filename("--标题. ") == "标题"
+    assert safe_filename("CON") == ""
+    assert safe_filename(" ?*") == ""
+    assert len(safe_filename("长" * 200)) == 80
+
+    ws = Workspace(tmp_path, "abcdefghijk")
+    assert output_name(ws) == "output.mp4"
+    ws.write_json("titles.json", {"zh_title": "中文标题：测试"})
+    assert output_name(ws) == "中文标题：测试.mp4"
+    ws.write_json("titles.json", {"zh_title": "a|b"})
+    assert output_name(ws) == "a b.mp4"
+    assert build_command("video.mp4", "libx264", Config(), None, "a b.mp4")[-1] == "a b.mp4"
