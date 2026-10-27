@@ -82,14 +82,26 @@ def ass_color(rgb: str, opacity: float) -> str:
     return f"&H{alpha:02X}{rgb[4:6]}{rgb[2:4]}{rgb[0:2]}".upper()
 
 
+def _rounded_rect(x0: float, y0: float, x1: float, y1: float, r: float) -> str:
+    """ASS 绘图指令：圆角矩形（三次贝塞尔近似圆弧）。"""
+    r = max(0.0, min(r, (x1 - x0) / 2, (y1 - y0) / 2))
+    c = r * (1 - 0.5523)
+    pts = [
+        f"m {x0 + r:.1f} {y0:.1f}", f"l {x1 - r:.1f} {y0:.1f}",
+        f"b {x1 - c:.1f} {y0:.1f} {x1:.1f} {y0 + c:.1f} {x1:.1f} {y0 + r:.1f}", f"l {x1:.1f} {y1 - r:.1f}",
+        f"b {x1:.1f} {y1 - c:.1f} {x1 - c:.1f} {y1:.1f} {x1 - r:.1f} {y1:.1f}", f"l {x0 + r:.1f} {y1:.1f}",
+        f"b {x0 + c:.1f} {y1:.1f} {x0:.1f} {y1 - c:.1f} {x0:.1f} {y1 - r:.1f}", f"l {x0:.1f} {y0 + r:.1f}",
+        f"b {x0:.1f} {y0 + c:.1f} {x0 + c:.1f} {y0:.1f} {x0 + r:.1f} {y0:.1f}",
+    ]
+    return " ".join(pts)
+
+
 def build_ass(events: list[tuple[float, float, str]], width: int, height: int, cfg) -> str:
     font_size = max(16, round(min(width, height) * cfg.font_scale))
     margin_v = round(height * cfg.margin_scale)
-    # BorderStyle=4（libass 扩展）：用 BackColour 画背景框，同时保留文字描边；=1 时只有描边
-    if cfg.box_opacity > 0:
-        border_style, back = 4, ass_color(cfg.box_color, cfg.box_opacity)
-    else:
-        border_style, back = 1, "&H64000000"
+    box = ass_color(cfg.box_color, cfg.box_opacity)
+    pad = font_size * cfg.box_padding if cfg.box_opacity > 0 else 0.0
+    text_margin = round(margin_v + pad)
     header = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {width}
@@ -99,14 +111,25 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,{cfg.font},{font_size},&H00FFFFFF,&H000000FF,&H00000000,{back},0,0,0,0,100,100,0,0,{border_style},{cfg.outline},0,2,20,20,{margin_v},1
+Style: Default,{cfg.font},{font_size},&H00FFFFFF,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,{cfg.outline},0,2,20,20,{text_margin},1
+Style: Box,{cfg.font},{font_size},{box},&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,7,0,0,0,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
-    lines = [
-        f"Dialogue: 0,{_ass_time(s)},{_ass_time(e)},Default,,0,0,0,,{_ass_escape(t)}" for s, e, t in events
-    ]
+    lines = []
+    for s, e, t in events:
+        start, end = _ass_time(s), _ass_time(e)
+        if cfg.box_opacity > 0:
+            # libass 中字号 = 行高；等宽字体下按字符宽度估算文字宽度，背景框单独画在下层
+            rows = t.split("\n")
+            w = max(display_width(r) for r in rows) * font_size * cfg.char_width
+            y1 = height - text_margin + pad
+            y0 = height - text_margin - len(rows) * font_size - pad
+            x0, x1 = width / 2 - w / 2 - pad, width / 2 + w / 2 + pad
+            shape = _rounded_rect(x0, y0, x1, y1, font_size * cfg.box_radius)
+            lines.append(f"Dialogue: 0,{start},{end},Box,,0,0,0,,{{\\an7\\pos(0,0)\\p1}}{shape}")
+        lines.append(f"Dialogue: 1,{start},{end},Default,,0,0,0,,{_ass_escape(t)}")
     return header + "\n".join(lines) + "\n"
 
 

@@ -328,11 +328,13 @@ def test_ass_box_style():
     assert ass_color("000000", 0.1) == "&HE6000000"
     assert ass_color("000000", 0.9) == "&H19000000"
     assert ass_color("#FF8000", 1.0) == "&H000080FF"
-    style = next(ln for ln in build_ass([], 1280, 720, SubtitleConfig()).splitlines() if ln.startswith("Style:"))
-    fields = style.split(",")
-    assert fields[6] == "&H19000000" and fields[15] == "4"
-    style = next(ln for ln in build_ass([], 1280, 720, SubtitleConfig(box_opacity=0)).splitlines() if ln.startswith("Style:"))
-    assert style.split(",")[15] == "1"
+    ass = build_ass([(0.0, 1.0, "你好")], 1280, 720, SubtitleConfig())
+    box = next(ln for ln in ass.splitlines() if ln.startswith("Style: Box"))
+    assert box.split(",")[3] == "&H19000000"
+    dialogues = [ln for ln in ass.splitlines() if ln.startswith("Dialogue:")]
+    assert len(dialogues) == 2 and r"\p1}m " in dialogues[0] and dialogues[1].endswith("你好")
+    ass = build_ass([(0.0, 1.0, "你好")], 1280, 720, SubtitleConfig(box_opacity=0))
+    assert len([ln for ln in ass.splitlines() if ln.startswith("Dialogue:")]) == 1
 
 
 def test_display_lines_avoid_short_first_line():

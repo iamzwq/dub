@@ -87,9 +87,12 @@ class SubtitleConfig(BaseModel):
     prefer_single_line: bool = True  # 需要换行时，若能在标点处切开且时间够读，改为一行一屏
     min_screen_duration: float = 1.0  # 一行一屏时，每屏最短显示秒数
     max_cps: float = 8.0  # 一行一屏时，该句阅读速度上限（汉字宽/秒），更快则仍一屏多行
-    outline: float = 3.0
+    outline: float = 0.0  # 描边宽度，0 表示无描边
     box_color: str = "000000"  # 背景框颜色（RGB 十六进制）
-    box_opacity: float = 0.90  # 背景框不透明度 0~1（0.9 = 透明度 10%），0 表示不加背景框
+    box_opacity: float = 0.50  # 背景框不透明度 0~1（0.9 = 透明度 10%），0 表示不加背景框
+    box_padding: float = 0.3  # 背景框内边距 = 字号 × 该比例
+    box_radius: float = 0.3  # 背景框圆角半径 = 字号 × 该比例，0 为直角
+    char_width: float = 0.855  # 全角字宽 / 字号（用于估算背景框宽度；霞鹜文楷等宽为 1000/1169）
     margin_scale: float = 0.01  # 字幕距底部 = 画面高度 × 该比例
     strip_punctuation: bool = True
 
