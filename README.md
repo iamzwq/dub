@@ -180,6 +180,20 @@ uv run ytdub voices --locale zh
 
 字幕时间跟随配音实际播放时间。
 
+## 使用 MOSS-TTS-Nano 配音（CUDA）
+
+[MOSS-TTS-Nano](https://github.com/OpenMOSS/MOSS-TTS-Nano) 以独立服务运行（通常与 ytdub 在同一台电脑），ytdub 通过 HTTP 调用其 `/api/generate`，两边依赖互不影响。另开一个终端启动服务：
+
+```powershell
+cd MOSS-TTS-Nano
+pip install -r requirements.txt
+pip uninstall -y onnxruntime; pip install "onnxruntime-gpu>=1.20.0"
+# 首次启动会自动下载 ONNX 权重到 ./models
+python app_onnx.py --execution-provider cuda --port 18083
+```
+
+注意用 `app_onnx.py`：PyTorch 版 `app.py` 强制只用 CPU。然后在 `config.yaml` 中设 `tts.engine: moss_nano` 即可（`tts.moss.url` 默认 `http://127.0.0.1:18083`；服务在其他电脑时，启动加 `--host 0.0.0.0` 并把 url 改为其局域网地址）。输出会转为 24kHz 单声道；模型没有语速参数，`rate` 通过 atempo 实现。
+
 ## 字幕显示
 
 每屏最多 2 行（`subtitle.max_lines`）、每行最多 40 个汉字宽（`subtitle.max_chars_per_line`，英文、数字按半个字计），同时不超过画面宽度的 90%：1080p 默认字号（59 像素）下每行实际最多约 29 字，想放更多字可调小 `subtitle.font_scale`。一屏放得下的句子整句显示；更长的句子才分成多屏，按显示宽度分配时间。需要换行的屏，如果能在句号、逗号等标点处切成单行，且每屏显示不短于 1 秒（`subtitle.min_screen_duration`）、该句语速不超过每秒 8 字（`subtitle.max_cps`），就改为一行一屏，否则仍一屏两行；设 `subtitle.prefer_single_line: false` 可关闭。分屏、分行时尽量均衡长度，断开位置优先级为：句末标点 > 逗号等 > 空格 > 连词前（所以、但是……）> 词边界（jieba 分词）；不会在词语、英文单词、数字中间断开，行首不出现标点或“的、了、里”等单字，开引号不留在行尾。

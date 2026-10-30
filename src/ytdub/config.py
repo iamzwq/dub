@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Literal
 
 import yaml
 from dotenv import load_dotenv
@@ -61,7 +62,20 @@ class TranslateConfig(BaseModel):
     glossary: str = "glossary.yaml"
 
 
+class MossNanoConfig(BaseModel):
+    """MOSS-TTS-Nano ONNX 服务（app_onnx.py）的 /api/generate 接口。"""
+
+    url: str = "http://127.0.0.1:18083"
+    prompt_audio: str = ""  # 本机参考音频（音色克隆），留空则使用服务端示例音色 demo_id
+    demo_id: str = "demo-1"
+    seed: int = 1234  # 固定种子使结果可复现；0 表示随机
+    max_new_frames: int = 375  # 12.5 帧/秒，375 ≈ 30 秒
+    concurrency: int = 2  # 服务端串行推理，并发过高只会排队超时
+    timeout: float = 300
+
+
 class TTSConfig(BaseModel):
+    engine: Literal["edge", "moss_nano"] = "edge"
     voice: str = "zh-CN-YunyangNeural"
     rate: int = 5
     max_rate: int = 30
@@ -69,6 +83,7 @@ class TTSConfig(BaseModel):
     retries: int = 3
     trim_silence_db: float = -45.0
     proxy: str = ""
+    moss: MossNanoConfig = Field(default_factory=MossNanoConfig)
 
 
 class AlignConfig(BaseModel):
