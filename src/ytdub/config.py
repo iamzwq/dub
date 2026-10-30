@@ -74,8 +74,22 @@ class MossNanoConfig(BaseModel):
     timeout: float = 300
 
 
+class DashScopeConfig(BaseModel):
+    """阿里云百炼语音合成（dashscope tts_v2 WebSocket）。api_key 留空则读环境变量 DASHSCOPE_API_KEY。"""
+
+    api_key: str = ""
+    url: str = ""  # WebSocket 地址，留空用 SDK 默认（wss://dashscope.aliyuncs.com/api-ws/v1/inference）
+    model: str = "qwen-audio-3.1-tts-flash"
+    voice: str = "longanhuan_v3.1"
+    concurrency: int = 4
+    timeout: float = 60
+
+    def resolved_api_key(self) -> str:
+        return (self.api_key or os.environ.get("DASHSCOPE_API_KEY", "")).strip()
+
+
 class TTSConfig(BaseModel):
-    engine: Literal["edge", "moss_nano"] = "edge"
+    engine: Literal["edge", "moss_nano", "dashscope"] = "edge"
     voice: str = "zh-CN-YunyangNeural"
     rate: int = 5
     max_rate: int = 30
@@ -84,6 +98,7 @@ class TTSConfig(BaseModel):
     trim_silence_db: float = -45.0
     proxy: str = ""
     moss: MossNanoConfig = Field(default_factory=MossNanoConfig)
+    dashscope: DashScopeConfig = Field(default_factory=DashScopeConfig)
 
 
 class AlignConfig(BaseModel):

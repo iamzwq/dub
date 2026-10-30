@@ -1,4 +1,4 @@
-"""配音合成工具（edge-tts / MOSS-TTS-Nano，带重试、缓存、静音裁剪）。"""
+"""配音合成工具（edge-tts / MOSS-TTS-Nano / DashScope，带重试、缓存、静音裁剪）。"""
 from __future__ import annotations
 
 import asyncio
@@ -41,13 +41,19 @@ def voice_key(t: TTSConfig) -> str:
     """音色标识，用于缓存文件名与步骤指纹。"""
     if t.engine == "edge":
         return t.voice
+    if t.engine == "dashscope":
+        return f"dashscope|{t.dashscope.model}|{t.dashscope.voice}"
     m = t.moss
     ref = f"file:{_file_hash(m.prompt_audio)}" if m.prompt_audio else f"demo:{m.demo_id}"
     return f"moss_nano|{ref}|seed={m.seed}"
 
 
 def concurrency(t: TTSConfig) -> int:
-    return t.moss.concurrency if t.engine == "moss_nano" else t.concurrency
+    if t.engine == "moss_nano":
+        return t.moss.concurrency
+    if t.engine == "dashscope":
+        return t.dashscope.concurrency
+    return t.concurrency
 
 
 def speakable(text: str) -> bool:
@@ -68,6 +74,8 @@ async def synthesize(t: TTSConfig, text: str, rate: int, out: Path) -> float:
         return 0.0
     if t.engine == "moss_nano":
         return await _synthesize_moss_nano(t, text, rate, out)
+    if t.engine == "dashscope":
+        return await _synthesize_dashscope(t, text, rate, out)
     return await _synthesize_edge(text, t.voice, rate, out, t.retries, t.trim_silence_db, t.proxy)
 
 
@@ -110,6 +118,52 @@ async def _synthesize_moss_nano(t: TTSConfig, text: str, rate: int, out: Path) -
         write_wav(out, data, sr)
         raw.unlink(missing_ok=True)
         conv.unlink(missing_ok=True)
+        return data.size / sr
+
+    return await asyncio.to_thread(_post)
+
+
+async def _synthesize_dashscope(t: TTSConfig, text: str, rate: int, out: Path) -> float:
+    import dashscope
+    from dashscope.audio.tts_v2 import AudioFormat, SpeechSynthesizer
+
+    d = t.dashscope
+    api_key = d.resolved_api_key()
+    if not api_key:
+        raise RuntimeError("DashScope 未配置 API Key：设置 tts.dashscope.api_key 或环境变量 DASHSCOPE_API_KEY")
+    dashscope.api_key = api_key
+
+    def _call() -> bytes | None:
+        synth = SpeechSynthesizer(
+            model=d.model,
+            voice=d.voice,
+            format=AudioFormat.WAV_24000HZ_MONO_16BIT,
+            speech_rate=max(0.5, min(2.0, 1 + rate / 100)),
+            url=d.url or None,
+        )
+        return synth.call(text, timeout_millis=int(d.timeout * 1000))
+
+    last: Exception | None = None
+    for attempt in range(1, t.retries + 1):
+        try:
+            wav = await asyncio.to_thread(_call)
+            if wav:
+                break
+            raise RuntimeError("未收到音频")
+        except Exception as e:  # noqa: BLE001
+            last = e
+            log.debug("DashScope 失败（第 %d 次）：%s", attempt, e)
+        await asyncio.sleep(min(2 ** attempt, 15))
+    else:
+        raise RuntimeError(f"DashScope 合成失败：{last}")
+
+    def _post() -> float:
+        raw = out.with_suffix(".raw.wav")
+        raw.write_bytes(wav)
+        data, sr = read_audio(raw)
+        data = trim_silence(data, sr, t.trim_silence_db)
+        write_wav(out, data, sr)
+        raw.unlink(missing_ok=True)
         return data.size / sr
 
     return await asyncio.to_thread(_post)

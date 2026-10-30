@@ -36,7 +36,7 @@ translate:
   glossary: glossary.yaml     # 用户术语表（优先级高于自动术语）
 
 tts:
-  engine: edge               # edge（edge-tts，在线）| moss_nano（MOSS-TTS-Nano 服务，可用 CUDA）
+  engine: edge               # edge（edge-tts，在线）| moss_nano（MOSS-TTS-Nano 服务，可用 CUDA）| dashscope（阿里云百炼）
   voice: zh-CN-YunyangNeural  # 仅 edge
   rate: 5                     # 基准语速 +5%（moss_nano 用 atempo 实现）
   max_rate: 30                # 超时时最多提速到 +30%
@@ -48,6 +48,11 @@ tts:
     demo_id: demo-1           # 服务端内置示例音色，对应 MOSS-TTS-Nano/assets/demo.jsonl 第 N 行
     seed: 1234                # 固定种子使结果可复现，0 = 随机
     concurrency: 2
+  dashscope:                  # engine: dashscope 时使用，API Key 放 .env 的 DASHSCOPE_API_KEY
+    url: ""                   # WebSocket 地址，留空用默认；专属部署填如 wss://ws-xxx.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference
+    model: qwen-audio-3.1-tts-flash
+    voice: longanhuan_v3.1
+    concurrency: 4
 
 align:
   shorten_rounds: 2           # 超时时让 LLM 精简译文的最大轮数，0 关闭
