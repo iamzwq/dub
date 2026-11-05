@@ -6,7 +6,7 @@ import numpy as np
 from ..context import Context, StepError
 from ..log import count_progress, log
 from ..media import probe, read_audio, write_wav
-from ..text import display_width, split_screens, strip_display_punct
+from ..text import display_width, normalize_quotes, split_screens, strip_display_punct
 
 
 def fingerprint(cfg) -> dict:
@@ -44,7 +44,7 @@ def subtitle_events(
     """
     events: list[tuple[float, float, str]] = []
     for i, e in enumerate(timeline):
-        text = e["zh"].strip()
+        text = normalize_quotes(e["zh"].strip())
         if not text:
             continue
         if e["duration"] > 0:

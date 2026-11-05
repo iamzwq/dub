@@ -154,7 +154,25 @@ _jieba = None
 
 def display_width(s: str) -> float:
     """显示宽度（以一个汉字为 1）：全角字符 1，半角字符（英文、数字、空格）0.5。"""
-    return sum(1.0 if unicodedata.east_asian_width(ch) in ("W", "F") else 0.5 for ch in s)
+    return sum(1.0 if ch in _FULL_WIDTH_QUOTES or unicodedata.east_asian_width(ch) in ("W", "F") else 0.5 for ch in s)
+
+
+_FULL_WIDTH_QUOTES = "“”‘’"  # 东亚宽度为歧义（A），但中文字体中占一个汉字宽
+
+
+def normalize_quotes(text: str) -> str:
+    """把译文中成对的直引号换成中文弯引号；英文擇号（Moore's）和不成对的引号（如 27"）保持不变。"""
+    chars = list(text)
+    for q, pair in (('"', "“”"), ("'", "‘’")):
+        pos = [
+            i for i, ch in enumerate(chars)
+            if ch == q and not (0 < i < len(chars) - 1 and chars[i - 1].isascii() and chars[i - 1].isalnum()
+                                and chars[i + 1].isascii() and chars[i + 1].isalnum())
+        ]
+        if pos and len(pos) % 2 == 0:
+            for k, i in enumerate(pos):
+                chars[i] = pair[k % 2]
+    return "".join(chars)
 
 
 def _word_boundaries(text: str) -> tuple[set[int], set[int]]:

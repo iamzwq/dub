@@ -376,8 +376,18 @@ def test_no_line_starts_with_punct_or_particle():
 
 def test_ascii_counts_half_width():
     assert display_width("ABCD") == 2 and display_width("中文") == 2
+    assert display_width("“”‘’") == 4
     # 全英文 40 个半角字符 = 20 宽，一行放得下
     assert balanced_split("a" * 40, 20) == ["a" * 40]
+
+
+def test_normalize_quotes():
+    from ytdub.text import normalize_quotes
+
+    assert normalize_quotes('他说："你好。"然后走了') == "他说：“你好。”然后走了"
+    assert normalize_quotes("所谓'摩尔定律'就是 Moore's Law") == "所谓‘摩尔定律’就是 Moore's Law"
+    assert normalize_quotes('一台 27" 的显示器') == '一台 27" 的显示器'
+    assert strip_display_punct(normalize_quotes('他说："你好。"')) == "他说：“你好”"
 
 
 def test_ass_multiline_escape():
