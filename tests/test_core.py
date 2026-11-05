@@ -505,6 +505,29 @@ def test_safe_filename_and_output_name(tmp_path):
     assert "concat=n=2:v=1:a=0[cut];[cut]subtitles=zh.ass" in graph
 
 
+def test_upload_info(tmp_path):
+    from ytdub.steps.translate import clean_topics
+    from ytdub.upload_info import FILENAME, write_upload_info
+    from ytdub.workspace import Workspace
+
+    assert clean_topics(["#AI", "ai", " 编程 ", "", "长" * 21, "ChatGPT"]) == ["AI", "编程", "ChatGPT"]
+    assert clean_topics("AI") == []
+
+    ws = Workspace(tmp_path, "abcdefghijk")
+    ws.write_json("meta.json", {
+        "webpage_url": "https://www.youtube.com/watch?v=abcdefghijk", "upload_date": "20240105",
+        "uploader": "Someone", "title": "Hello", "description": "Original desc",
+    })
+    write_upload_info(ws)
+    assert not ws.path(FILENAME).exists()  # 翻译完成前不生成
+    ws.write_json("titles.json", {"zh_title": "你好", "zh_description": "中文简介", "topics": ["AI", "Claude Code"]})
+    write_upload_info(ws)
+    text = ws.path(FILENAME).read_text(encoding="utf-8")
+    for s in ("https://www.youtube.com/watch?v=abcdefghijk", "2024-01-05", "Someone", "AI, Claude Code", "中文简介"):
+        assert s in text
+    assert "Original desc" not in text and "你好" not in text
+
+
 def test_tts_retry_no_sleep_after_last(monkeypatch):
     import asyncio
     from ytdub import tts

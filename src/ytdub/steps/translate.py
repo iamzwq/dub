@@ -67,8 +67,7 @@ def run(ctx: Context) -> None:
     if lang.lower() in _SIMPLIFIED:
         log.info("源语言为简体中文，跳过翻译")
         ws.write_json("translation.json", [{"id": s.id, "src": s.text, "zh": s.text} for s in sentences])
-        title = meta.get("title", "")
-        ws.write_json("titles.json", {"zh_title": title, "cover_title": title, "summary": "", "terms": []})
+        ws.write_json("titles.json", default_titles(meta, zh_description=meta.get("description") or ""))
         return
 
     try:
@@ -76,6 +75,12 @@ def run(ctx: Context) -> None:
     except LLMError as e:
         raise StepError(str(e)) from e
     ctx.run_async(_translate_all(ctx, llm, sentences, lang, meta, duration))
+
+
+def default_titles(meta: dict, **override) -> dict:
+    title = meta.get("title", "")
+    return {"summary": "", "terms": [], "zh_title": title, "cover_title": title,
+            "zh_description": "", "topics": [], **override}
 
 
 async def _summarize(llm: LLM, sentences: list[Sentence], meta: dict) -> dict:
@@ -104,9 +109,22 @@ async def _summarize(llm: LLM, sentences: list[Sentence], meta: dict) -> dict:
             "terms": terms,
             "zh_title": str(data.get("zh_title") or meta.get("title", "")),
             "cover_title": str(data.get("cover_title") or data.get("zh_title") or meta.get("title", "")),
+            "zh_description": str(data.get("zh_description") or "").strip(),
+            "topics": clean_topics(data.get("topics")),
         }
 
     return await llm.chat_json(SUMMARY_SYSTEM, user, validate=validate, label="摘要/术语")
+
+
+def clean_topics(raw, limit: int = 10, max_len: int = 20) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for t in raw if isinstance(raw, list) else []:
+        t = str(t).strip().lstrip("#＃").strip()
+        if t and len(t) <= max_len and t.lower() not in seen:
+            seen.add(t.lower())
+            out.append(t)
+    return out[:limit]
 
 
 CACHE = "translate.cache.json"
@@ -131,8 +149,7 @@ async def _translate_all(ctx: Context, llm: LLM, sentences: list[Sentence], lang
             raise
         except LLMError as e:
             log.warning("摘要/术语生成失败，继续翻译：%s", e)
-            title = meta.get("title", "")
-            titles = {"summary": "", "terms": [], "zh_title": title, "cover_title": title}
+            titles = default_titles(meta)
         cache["titles"] = titles
         ws.write_json(CACHE, cache)
     ws.write_json("titles.json", titles)

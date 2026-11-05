@@ -163,6 +163,7 @@ uv run ytdub voices --locale zh
 所有文件在 `work/<video_id>/` 下（目录可通过 `workdir` 配置）：
 
 - `<中文标题>.mp4`：成品视频，文件名取自翻译后的标题（`titles.json` 的 `zh_title`，已去掉文件名非法字符）；标题为空时为 `output.mp4`
+- `投稿信息.txt`：原视频链接、发布日期、原作者、原标题、中文简介、B 站 Topic，方便投稿时复制；翻译步骤完成后，每次运行结束时更新
 - `run.log`：完整日志
 - `report.json`：断句、LLM 用量、时长对齐等统计
 - 每个步骤的中间产物见上方「流程」表

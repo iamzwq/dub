@@ -10,6 +10,7 @@ from .context import Context, StepError
 from .log import attach_file_log, console, log
 from .media import require_tools
 from .steps import MODULES
+from .upload_info import write_upload_info
 from .workspace import STEP_TITLES, STEPS, Workspace, fingerprint, parse_video_id
 
 
@@ -73,6 +74,7 @@ def run_pipeline(url: str, cfg: Config, from_step: str | None, to_step: str | No
             ws.update_report("llm", ctx._llm.usage())
         ctx.close()
 
+    write_upload_info(ws)
     print_summary(ws, time.time() - t_all, last)
     return 0
 
