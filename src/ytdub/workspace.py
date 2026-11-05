@@ -7,6 +7,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from .errors import StepError
+
 STEPS = ["download", "segment", "translate", "tts", "align", "mix", "cover", "compose"]
 
 STEP_TITLES = {
@@ -74,6 +76,16 @@ class Workspace:
         tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         tmp.replace(p)
 
+    def require_json(self, name: str, step: str) -> Any:
+        """读取上游步骤 step 的产物，缺失或为空时报错。"""
+        data = self.read_json(name)
+        if not data:
+            raise StepError(f"缺少 {name}，请先执行「{STEP_TITLES[step]}」步骤")
+        return data
+
+    def meta(self) -> dict:
+        return self.read_json("meta.json") or {}
+
     # ---- 步骤状态 ----
     def load_state(self) -> dict:
         return self.read_json("state.json", {"steps": {}})
@@ -111,3 +123,9 @@ class Workspace:
             if p.suffix.lower() in {".mp4", ".mkv", ".webm", ".mov"}:
                 return p
         return None
+
+    def require_video(self) -> Path:
+        video = self.find_video()
+        if video is None:
+            raise StepError("未找到下载的视频文件，请先执行下载步骤")
+        return video

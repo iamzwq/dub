@@ -53,6 +53,34 @@ def test_abbreviation_dot():
     assert is_abbreviation_dot("Talk to Mr.", 10)
     assert is_abbreviation_dot("John F.", 6)
     assert is_abbreviation_dot('("e.g.', 5)
+    assert not is_abbreviation_dot("So do I.", 7)
+    assert not is_abbreviation_dot("Take vitamin C.", 14)
+    assert not is_abbreviation_dot("plan b.", 6)
+
+
+def test_sentence_breaks_single_letter_endings():
+    assert _split("So do I. Next one.") == ["So do I.", "Next one."]
+    assert _split("Take vitamin C. It helps.") == ["Take vitamin C.", "It helps."]
+    assert _split("John F. Kennedy spoke.") == ["John F. Kennedy spoke."]
+
+
+def test_split_by_duration_for_ai_groups():
+    from ytdub.subtitles import split_by_duration
+
+    toks = [Token(f"w{i}", i * 0.5, i * 0.5 + 0.4) for i in range(40)]
+    items = split_by_duration(toks, "en", 8)
+    assert len(items) > 1
+    assert all(e - s <= 8 for s, e, _ in items)
+    assert " ".join(t for _, _, t in items) == " ".join(t.text for t in toks)
+
+
+def test_subtitle_end_clamped_to_next_start():
+    timeline = [
+        {"zh": "……", "duration": 0, "start": 0.0, "end": 3.0, "play_start": 0.0, "play_end": 0.0},
+        {"zh": "你好", "duration": 1.0, "start": 2.0, "end": 3.0, "play_start": 2.0, "play_end": 3.0},
+    ]
+    events = subtitle_events(timeline, 20, strip_punct=False)
+    assert events[0][1] <= events[1][0]
 
 
 def test_has_punctuation():
@@ -334,6 +362,7 @@ def test_parse_video_id():
 def test_extract_json_variants():
     assert extract_json('```json\n{"a": 1}\n```') == {"a": 1}
     assert extract_json('<think>hmm</think>{"a": 2}') == {"a": 2}
+    assert extract_json('<think>hmm</think>\n```json\n{"a": 4}\n```') == {"a": 4}
     assert extract_json('Here: {"a": 3} done') == {"a": 3}
 
 
@@ -499,6 +528,8 @@ def test_safe_filename_and_output_name(tmp_path):
     assert output_name(ws) == "中文标题：测试.mp4"
     ws.write_json("titles.json", {"zh_title": "a|b"})
     assert output_name(ws) == "a b.mp4"
+    ws.write_json("titles.json", {"zh_title": "Video"})
+    assert output_name(ws) == "output.mp4"
     assert build_command("video.mp4", "libx264", Config(), None, "a b.mp4")[-1] == "a b.mp4"
     cmd = build_command("video.mp4", "libx264", Config(), None, keep=[(0, 10), (20, 30)])
     graph = cmd[cmd.index("-filter_complex") + 1]

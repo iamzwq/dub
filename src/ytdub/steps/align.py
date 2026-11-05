@@ -49,7 +49,7 @@ async def _run(ctx: Context) -> None:
     tts_items = {d["id"]: d for d in ws.read_json("tts.json", []) or []}
     if len(tts_items) != len(sentences):
         raise StepError("tts.json 与 sentences.json 不一致，请重跑配音步骤")
-    meta = ws.read_json("meta.json") or {}
+    meta = ws.meta()
     video_duration = meta.get("duration")
 
     entries: list[dict] = []

@@ -13,10 +13,7 @@ def fingerprint(cfg) -> dict:
 
 
 def load_translation(ctx: Context) -> list[dict]:
-    data = ctx.ws.read_json("translation.json")
-    if not data:
-        raise StepError("缺少 translation.json，请先执行翻译步骤")
-    return data
+    return ctx.ws.require_json("translation.json", "translate")
 
 
 def run(ctx: Context) -> None:

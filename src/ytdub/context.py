@@ -5,12 +5,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .config import Config
+from .errors import StepError
 from .llm import LLM
 from .workspace import Workspace
 
-
-class StepError(RuntimeError):
-    """可预期的流程错误：打印提示后中断。"""
+__all__ = ["Context", "StepError"]
 
 
 @dataclass

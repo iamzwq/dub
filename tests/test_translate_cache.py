@@ -11,6 +11,7 @@ class StubLLM:
         self.tag = tag
         self.model = tag
         self.calls = 0
+        self.glossaries: list[dict] = []
         self.prompt_tokens = self.completion_tokens = 0
 
     async def chat_json(self, system, user, validate=None, label=""):
@@ -19,6 +20,7 @@ class StubLLM:
             data = {"summary": "s", "terms": [], "zh_title": f"标题{self.tag}", "cover_title": f"封面{self.tag}"}
         else:
             payload = json.loads(user)
+            self.glossaries.append(payload["glossary"])
             data = {"translations": [{"id": s["id"], "zh": f"{self.tag}译文{s['id']}"} for s in payload["sentences"]]}
         return validate(data) if validate else data
 
@@ -36,9 +38,9 @@ def _setup(tmp_path):
     return ws
 
 
-def _run(ws, model: str, tmp_path) -> StubLLM:
+def _run(ws, model: str, tmp_path, glossary: str = "none.yaml") -> StubLLM:
     cfg = Config.model_validate({"llm": {"base_url": "http://localhost/v1", "model": model},
-                                 "translate": {"glossary": str(tmp_path / "none.yaml")}})
+                                 "translate": {"glossary": str(tmp_path / glossary)}})
     ctx = Context(cfg=cfg, ws=ws, url="VIDEO000001")
     stub = StubLLM(model)
     ctx._llm = stub
@@ -71,3 +73,18 @@ def test_translate_cache_reuse_and_invalidation(tmp_path):
     assert not ws.path(translate.CACHE).exists()
     forced = _run(ws, "B", tmp_path)
     assert forced.calls == 2
+
+
+def test_glossary_matches_whole_words(tmp_path):
+    ws = _setup(tmp_path)  # 句子：Hello. / World.
+    (tmp_path / "g.yaml").write_text("ell: X\nhello: 你好\nWorld: 世界\n", encoding="utf-8")
+    stub = _run(ws, "A", tmp_path, "g.yaml")
+    assert stub.glossaries == [{"hello": "你好", "World": "世界"}]
+
+
+def test_cached_translation_rewrites_output(tmp_path):
+    ws = _setup(tmp_path)
+    _run(ws, "A", tmp_path)
+    ws.path("translation.json").unlink()
+    assert _run(ws, "A", tmp_path).calls == 0
+    assert ws.read_json("translation.json")

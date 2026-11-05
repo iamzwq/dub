@@ -172,7 +172,7 @@ uv run ytdub voices --locale zh
 
 中文配音往往比原文长，按以下顺序处理，画面始终原速：
 
-1. 翻译时按每句可用时长 × `chars_per_second`（默认 4.5 字/秒）限制字数；
+1. 翻译时按每句可用时长 × `chars_per_second`（默认 5 字/秒）限制字数；
 2. 超时则按比例提高配音语速（最高 `max_rate` = +30%）；
 3. 仍超时让 LLM 精简译文（最多 `shorten_rounds` 轮）；
 4. 用 atempo 压缩（≤ `atempo_max` = 1.15）；

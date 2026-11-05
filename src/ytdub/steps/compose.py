@@ -28,7 +28,8 @@ def safe_filename(title: str, max_len: int = 80) -> str:
 def output_name(ws) -> str:
     titles = ws.read_json("titles.json") or {}
     name = safe_filename(str(titles.get("zh_title") or ""))
-    return f"{name}.mp4" if name else OUTPUT
+    # 不能与下载的原视频 video.* 同名
+    return f"{name}.mp4" if name and name.lower() != "video" else OUTPUT
 
 
 def fingerprint(cfg) -> dict:
@@ -95,14 +96,12 @@ def _run_ffmpeg(ctx: Context, args: list[str], duration: float, label: str) -> N
 
 def run(ctx: Context) -> None:
     ws, cfg = ctx.ws, ctx.cfg
-    video = ws.find_video()
-    if video is None:
-        raise StepError("未找到下载的视频文件")
+    video = ws.require_video()
     for name in ("dub.wav", "zh.ass"):
         if not ws.path(name).exists():
             raise StepError(f"缺少 {name}，请先执行拼接步骤")
     duration = probe(video)["duration"]
-    cuts = [tuple(c) for c in (ws.read_json("meta.json") or {}).get("cuts") or []]
+    cuts = [tuple(c) for c in ws.meta().get("cuts") or []]
     keep = keep_ranges(cuts, duration) if cuts else None
     if keep:
         log.info("剪除 %d 个广告/赞助片段（共 %.1fs）", len(cuts), sum(b - a for a, b in cuts))

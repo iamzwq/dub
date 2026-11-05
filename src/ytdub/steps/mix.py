@@ -53,6 +53,8 @@ def subtitle_events(
             start, end = e["start"], e["end"]
         nxt = timeline[i + 1]["play_start"] if i + 1 < len(timeline) else end + 0.5
         end = max(end, min(nxt, end + 0.5))
+        if start < nxt:  # 无配音的句子用原字幕时间，可能超过顺延后的下一句
+            end = min(end, nxt)
         min_split_width = None
         if prefer_single_line and end > start:
             cps = display_width(text) / (end - start)
@@ -140,13 +142,9 @@ def max_chars_for(width: int, height: int, cfg) -> int:
 
 def run(ctx: Context) -> None:
     ws, cfg = ctx.ws, ctx.cfg
-    timeline = ws.read_json("timeline.json")
-    if not timeline:
-        raise StepError("缺少 timeline.json，请先执行对齐步骤")
-    meta = ws.read_json("meta.json") or {}
-    video = ws.find_video()
-    if video is None:
-        raise StepError("未找到下载的视频文件")
+    timeline = ws.require_json("timeline.json", "align")
+    meta = ws.meta()
+    video = ws.require_video()
     v = meta.get("video") or probe(video)
     width, height = v.get("width", 1920), v.get("height", 1080)
     duration = meta.get("duration") or v["duration"]

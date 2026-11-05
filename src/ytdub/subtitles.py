@@ -1,12 +1,14 @@
-"""字幕解析（json3 / vtt）与按句末标点断句。"""
+"""字幕解析（json3 / vtt）与断句（句末标点优先，超长按停顿/从句边界拆分）。"""
 from __future__ import annotations
 
+import json
 import re
 
 from .models import Sentence, Token
 from .text import (
     CLAUSE_PUNCT,
     CLOSERS,
+    EN_CONJUNCTIONS,
     QUOTE_CLOSE,
     QUOTE_OPEN,
     SENT_END,
@@ -15,16 +17,14 @@ from .text import (
     inseparable,
     is_abbreviation_dot,
     is_no_space,
-    join_tokens,
 )
-
-_CONJUNCTIONS = {
-    "and", "but", "so", "because", "which", "that", "or", "then", "when", "where", "while", "if",
-    "although", "though", "since", "until", "after", "before", "unless", "whereas",
-}
 
 
 # ---------------------------------------------------------------- 解析
+def parse_subtitle(content: str, ext: str) -> list[Token]:
+    return parse_json3(json.loads(content)) if ext == "json3" else parse_vtt(content)
+
+
 def parse_json3(data: dict) -> list[Token]:
     """解析 YouTube json3 字幕。自动字幕含逐词时间戳，手动字幕每个事件为一个 cue。"""
     tokens: list[Token] = []
@@ -269,7 +269,7 @@ def _split_by_time(
             score += 1.5
         if spaced:
             word = _WORD_RE.match(text, k).group().lower().strip(",.;:!?\"'")
-            if word in _CONJUNCTIONS:
+            if word in EN_CONJUNCTIONS:
                 score += 2
         elif text.startswith(_ZH_CONJ_MULTI, k):
             score += 2
@@ -293,52 +293,27 @@ def segment_punct(
     单句超过 max_seconds（>0）时再按停顿和从句边界拆分，每段沿用原始字符时间戳。
     """
     text, times, hard, starts = _flatten(tokens, lang, max_gap)
-    sentences: list[Sentence] = []
+    items: list[tuple[float, float, str]] = []
     prev = 0
     for b in find_sentence_breaks(text, lang, times, hard):
-        for s, e in _split_by_time(text, times, starts, lang, prev, b, max_seconds):
-            sentences.append(Sentence(len(sentences) + 1, round(times[s][0], 3), round(times[e - 1][1], 3), text[s:e]))
+        items += _spans(text, times, _split_by_time(text, times, starts, lang, prev, b, max_seconds))
         prev = b
-    return sentences
+    return to_sentences(items)
 
 
-# ---------------------------------------------------------------- AI 断句辅助：按时长切分过长的句子
-def _best_split(group: list[Token]) -> int:
-    start, end = group[0].start, group[-1].end
-    dur = max(end - start, 1e-3)
-    mid = start + dur / 2
-    best_j, best_score = len(group) // 2, float("-inf")
-    for j in range(1, len(group)):
-        prev, cur = group[j - 1], group[j]
-        score = 0.0
-        if prev.text.rstrip()[-1:] in CLAUSE_PUNCT:
-            score += 3
-        if prev.text.rstrip()[-1:] in SENT_END:
-            score += 4
-        if cur.text.strip().lower().strip(",.") in _CONJUNCTIONS:
-            score += 2
-        score += min(cur.start - prev.end, 1.5) * 4
-        score -= abs(cur.start - mid) / dur * 6
-        if score > best_score:
-            best_j, best_score = j, score
-    return best_j
+def _spans(text: str, times: list[tuple[float, float]], spans: list[tuple[int, int]]) -> list[tuple[float, float, str]]:
+    return [(times[s][0], times[e - 1][1], text[s:e]) for s, e in spans]
 
 
-def split_long(group: list[Token], max_seconds: float) -> list[list[Token]]:
-    if len(group) <= 1 or group[-1].end - group[0].start <= max_seconds:
-        return [group]
-    j = _best_split(group)
-    return split_long(group[:j], max_seconds) + split_long(group[j:], max_seconds)
+def split_by_duration(tokens: list[Token], lang: str, max_seconds: float) -> list[tuple[float, float, str]]:
+    """把一组 token 按时长上限拆成若干 (start, end, text)，规则同 segment_punct 的超长拆分。"""
+    text, times, _, starts = _flatten(tokens, lang, 0.0)
+    return _spans(text, times, _split_by_time(text, times, starts, lang, 0, len(text), max_seconds))
 
 
-def groups_to_sentences(groups: list[list[Token]], lang: str, texts: list[str] | None = None) -> list[Sentence]:
+def to_sentences(items: list[tuple[float, float, str]]) -> list[Sentence]:
     sentences: list[Sentence] = []
-    for i, g in enumerate(groups):
-        if not g:
-            continue
-        text = texts[i] if texts else join_tokens([t.text for t in g], lang)
-        text = text.strip()
-        if not text:
-            continue
-        sentences.append(Sentence(id=len(sentences) + 1, start=round(g[0].start, 3), end=round(g[-1].end, 3), text=text))
+    for start, end, text in items:
+        if text.strip():
+            sentences.append(Sentence(len(sentences) + 1, round(start, 3), round(end, 3), text.strip()))
     return sentences

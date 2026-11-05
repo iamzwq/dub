@@ -36,10 +36,9 @@ def _short(e: Exception) -> str:
 
 
 def extract_json(content: str) -> Any:
-    content = content.strip()
+    # 先去掉部分推理模型输出的 <think> 块，再去掉代码块标记
+    content = re.sub(r"<think>.*?</think>", "", content.strip(), flags=re.S).strip()
     content = re.sub(r"^```(?:json)?\s*|\s*```$", "", content, flags=re.S).strip()
-    # 去掉部分推理模型输出的 <think> 块
-    content = re.sub(r"<think>.*?</think>", "", content, flags=re.S).strip()
     try:
         return json.loads(content)
     except json.JSONDecodeError:

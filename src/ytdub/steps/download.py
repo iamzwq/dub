@@ -11,7 +11,7 @@ from ..context import Context, StepError
 from ..cuts import merge_ranges
 from ..log import bytes_progress, log
 from ..media import probe
-from ..subtitles import parse_json3, parse_vtt
+from ..subtitles import parse_subtitle
 from ..text import base_lang
 
 SUB_EXTS = ("json3", "vtt")
@@ -129,12 +129,7 @@ def _download_subtitle(ydl, ctx: Context, fmt: dict) -> Path:
     path = ctx.ws.path(f"subs.src.{fmt['ext']}")
     path.write_bytes(raw)
     content = raw.decode("utf-8", errors="replace")
-    if fmt["ext"] == "json3":
-        import json
-
-        tokens = parse_json3(json.loads(content))
-    else:
-        tokens = parse_vtt(content)
+    tokens = parse_subtitle(content, fmt["ext"])
     if not tokens:
         raise StepError("字幕内容为空，已中断")
     log.info("字幕已下载：%s（%d 个片段）", path.name, len(tokens))

@@ -53,8 +53,15 @@ def is_abbreviation_dot(text: str, i: int) -> bool:
     words = text[:i].split()
     if not words:
         return False
-    word = words[-1].lstrip(QUOTE_OPEN + "\"'‘").lower()
-    return word in ABBREVIATIONS or (len(word) == 1 and word.isalpha())
+    strip = QUOTE_OPEN + "\"'‘"
+    raw = words[-1].lstrip(strip)
+    if raw.lower() in ABBREVIATIONS:
+        return True
+    if len(raw) != 1 or not raw.isalpha() or raw == "I" or raw.islower():
+        return False
+    # 大写单字母前是小写词时是句末（vitamin C.），否则视为人名首字母（John F.）
+    prev = words[-2].lstrip(strip) if len(words) > 1 else ""
+    return not prev[:1].islower()
 
 
 _NUMBER_SEPS = ",.'’\u202f\u2009"  # 千分位/小数分隔符：1,000  1.000,5  1'000  1 000（窄空格）
@@ -152,6 +159,10 @@ def inseparable(s: str, k: int) -> bool:
 _LINE_START_FORBIDDEN = SENT_END + CLAUSE_PUNCT + CLOSERS + "》〉"  # 不能出现在行首
 _LINE_START_PARTICLES = set("的了着过里们吗呢吧啊呀么地得上中下内外")  # 依附于前一个词的单字，尽量不放在行首
 _LINE_END_FORBIDDEN = "“‘「『（(【《〈"  # 不能留在行尾
+EN_CONJUNCTIONS = {
+    "and", "but", "so", "because", "which", "that", "or", "then", "when", "where", "while", "if",
+    "although", "though", "since", "until", "after", "before", "unless", "whereas",
+}
 ZH_CONJUNCTIONS = {
     "所以", "但是", "但", "因为", "而且", "如果", "然后", "以及", "并且", "或者", "不过", "可是", "于是",
     "因此", "同时", "而", "还是", "就是", "比如", "例如", "甚至", "否则", "虽然", "即使", "只要", "只有",
@@ -169,7 +180,7 @@ _FULL_WIDTH_QUOTES = "“”‘’"  # 东亚宽度为歧义（A），但中文�
 
 
 def normalize_quotes(text: str) -> str:
-    """把译文中成对的直引号换成中文弯引号；英文擇号（Moore's）和不成对的引号（如 27"）保持不变。"""
+    """把译文中成对的直引号换成中文弯引号；英文撇号（Moore's）和不成对的引号（如 27"）保持不变。"""
     chars = list(text)
     for q, pair in (('"', "“”"), ("'", "‘’")):
         pos = [

@@ -1,7 +1,6 @@
 """② 字幕解析与断句：有标点 → 按句末标点断句；无标点的自动字幕 → AI 断句。"""
 from __future__ import annotations
 
-import json
 from difflib import SequenceMatcher
 
 from ..context import Context, StepError
@@ -10,7 +9,7 @@ from ..llm import LLM, LLMError, LLMFatalError
 from ..log import count_progress, log
 from ..models import Sentence, Token
 from ..prompts import SEGMENT_SYSTEM
-from ..subtitles import groups_to_sentences, parse_json3, parse_vtt, segment_punct, split_long
+from ..subtitles import parse_subtitle, segment_punct, split_by_duration, to_sentences
 from ..text import has_punctuation, is_no_space, join_tokens, lang_name, split_units
 
 
@@ -23,12 +22,10 @@ def fingerprint(cfg) -> dict:
 
 
 def load_tokens(ctx: Context) -> tuple[list[Token], str, dict]:
-    meta = ctx.ws.read_json("meta.json")
-    if not meta:
-        raise StepError("缺少 meta.json，请先执行下载步骤")
+    meta = ctx.ws.require_json("meta.json", "download")
     sub = meta["subtitle"]
     content = ctx.ws.path(sub["file"]).read_text(encoding="utf-8", errors="replace")
-    tokens = parse_json3(json.loads(content)) if sub["ext"] == "json3" else parse_vtt(content)
+    tokens = parse_subtitle(content, sub["ext"])
     tokens = remap_tokens(tokens, [tuple(c) for c in meta.get("cuts") or []])
     if not tokens:
         raise StepError("字幕内容为空")
@@ -135,8 +132,7 @@ async def _segment_ai(llm: LLM, tokens: list[Token], lang: str, ctx: Context) ->
     chunk_size = cfg.ai_chunk_words * (2 if is_no_space(lang) else 1)
     # 按正常语速估算单句上限：英文等约 2.5 词/秒，中日文约 4 字/秒
     max_words = round(cfg.max_sentence_seconds * (4 if is_no_space(lang) else 2.5))
-    groups: list[list[Token]] = []
-    texts: list[str] = []
+    items: list[tuple[float, float, str]] = []
     n = len(tokens)
     i = 0
     with count_progress() as progress:
@@ -154,9 +150,7 @@ async def _segment_ai(llm: LLM, tokens: list[Token], lang: str, ctx: Context) ->
                 raise StepError(str(e)) from e
             except LLMError as e:
                 log.warning("AI 断句失败，该段回退为按停顿断句：%s", e)
-                for g in split_long(chunk, cfg.max_sentence_seconds):
-                    groups.append(g)
-                    texts.append(join_tokens([t.text for t in g], lang))
+                items += split_by_duration(chunk, lang, cfg.max_sentence_seconds)
                 i = j
                 progress.update(task, completed=i)
                 continue
@@ -171,12 +165,9 @@ async def _segment_ai(llm: LLM, tokens: list[Token], lang: str, ctx: Context) ->
                 if not g:
                     continue
                 if g[-1].end - g[0].start > cfg.max_sentence_seconds and len(g) > 1:
-                    for sub in split_long(g, cfg.max_sentence_seconds):
-                        groups.append(sub)
-                        texts.append(join_tokens([t.text for t in sub], lang))
+                    items += split_by_duration(g, lang, cfg.max_sentence_seconds)
                 else:
-                    groups.append(g)
-                    texts.append(text)
+                    items.append((g[0].start, g[-1].end, text))
             i = next_i
-            progress.update(task, completed=i, info=f"{len(groups)} 句")
-    return groups_to_sentences(groups, lang, texts)
+            progress.update(task, completed=i, info=f"{len(items)} 句")
+    return to_sentences(items)

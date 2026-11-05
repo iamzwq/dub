@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import math
+import re
 from pathlib import Path
 
 import yaml
@@ -43,10 +44,7 @@ def fingerprint(cfg) -> dict:
 
 
 def load_sentences(ctx: Context) -> list[Sentence]:
-    data = ctx.ws.read_json("sentences.json")
-    if not data:
-        raise StepError("缺少 sentences.json，请先执行断句步骤")
-    return [Sentence.from_dict(d) for d in data]
+    return [Sentence.from_dict(d) for d in ctx.ws.require_json("sentences.json", "segment")]
 
 
 def slot_seconds(sentences: list[Sentence], i: int, video_duration: float | None = None) -> float:
@@ -60,7 +58,7 @@ def slot_seconds(sentences: list[Sentence], i: int, video_duration: float | None
 def run(ctx: Context) -> None:
     ws = ctx.ws
     sentences = load_sentences(ctx)
-    meta = ws.read_json("meta.json") or {}
+    meta = ws.meta()
     lang = meta.get("language", "en")
     duration = meta.get("duration")
 
@@ -159,6 +157,10 @@ async def _translate_all(ctx: Context, llm: LLM, sentences: list[Sentence], lang
     user_glossary = load_user_glossary(_glossary_path(cfg))
     glossary.update(user_glossary)
     ws.write_json("glossary.json", glossary)
+    # 英文术语按整词匹配，避免 AI 命中 said
+    term_patterns = {
+        k: (v, re.compile(rf"(?<![a-z0-9]){re.escape(k.lower())}(?![a-z0-9])")) for k, v in glossary.items()
+    }
     log.info("术语表：自动 %d 条，用户 %d 条", len(titles.get("terms", [])), len(user_glossary))
 
     previous = cache["items"]
@@ -191,7 +193,7 @@ async def _translate_all(ctx: Context, llm: LLM, sentences: list[Sentence], lang
         before = [s.text for s in sentences[max(0, first - n): first]]
         after = [s.text for s in sentences[last + 1: last + 1 + n]]
         text_blob = " ".join([*before, *(s.text for s in batch), *after]).lower()
-        terms = {k: v for k, v in glossary.items() if k.lower() in text_blob}
+        terms = {k: v for k, (v, pattern) in term_patterns.items() if pattern.search(text_blob)}
         payload = {
             "context_before": before,
             "sentences": [{"id": s.id, "text": s.text, "max_chars": max_chars[s.id]} for s in batch],
@@ -231,6 +233,7 @@ async def _translate_all(ctx: Context, llm: LLM, sentences: list[Sentence], lang
 
     todo = [s for s in sentences if s.id not in results]
     if not todo:
+        save()
         log.info("翻译已全部完成（使用缓存）")
         return
     # 按原顺序把待翻译句子切成批次（批次内保持连续）

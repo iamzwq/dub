@@ -31,7 +31,7 @@ def build_upload_info(meta: dict, titles: dict) -> str:
 
 
 def write_upload_info(ws: Workspace) -> None:
-    meta = ws.read_json("meta.json")
+    meta = ws.meta()
     titles = ws.read_json("titles.json")
     if not meta or not titles:
         return
