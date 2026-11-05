@@ -5,6 +5,7 @@ import json
 from difflib import SequenceMatcher
 
 from ..context import Context, StepError
+from ..cuts import remap_tokens
 from ..llm import LLM, LLMError, LLMFatalError
 from ..log import count_progress, log
 from ..models import Sentence, Token
@@ -28,6 +29,7 @@ def load_tokens(ctx: Context) -> tuple[list[Token], str, dict]:
     sub = meta["subtitle"]
     content = ctx.ws.path(sub["file"]).read_text(encoding="utf-8", errors="replace")
     tokens = parse_json3(json.loads(content)) if sub["ext"] == "json3" else parse_vtt(content)
+    tokens = remap_tokens(tokens, [tuple(c) for c in meta.get("cuts") or []])
     if not tokens:
         raise StepError("字幕内容为空")
     return tokens, meta["language"], meta

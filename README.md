@@ -1,19 +1,19 @@
 # ytdub — YouTube 视频中文配音工具
 
-下载 YouTube 视频 / 封面 / 字幕 → AI 断句与翻译（上下文 + 术语表 + 批量）→ edge-tts 中文配音 → 时长对齐 → ffmpeg 烧录中文字幕并合成新视频。
+下载 YouTube 视频 / 封面 / 字幕（可自动剪除赞助广告）→ AI 断句与翻译（上下文 + 术语表 + 批量）→ edge-tts 中文配音 → 时长对齐 → ffmpeg 烧录中文字幕并合成新视频。
 
 ## 流程
 
 | # | 步骤 | 产物（`work/<video_id>/`） |
 |---|---|---|
-| 1 | 下载：yt-dlp + cookies，优先手动字幕，无则自动字幕，都没有则中断 | `meta.json` `video.mp4` `cover.jpg` `subs.src.json3` |
-| 2 | 断句：字幕有标点 → 只按句末标点断句（保留完整句子）；无标点 → AI 断句 | `sentences.json` |
+| 1 | 下载：yt-dlp + cookies，优先手动字幕，无则自动字幕，都没有则中断；查询 SponsorBlock 得到要剪除的广告片段 | `meta.json` `video.mp4` `cover.jpg` `subs.src.json3` |
+| 2 | 断句：先去掉广告片段内的字幕；字幕有标点 → 只按句末标点断句（保留完整句子）；无标点 → AI 断句 | `sentences.json` |
 | 3 | 翻译：摘要 + 自动术语 + 用户术语表，带上下文批量翻译，按时长限制字数 | `titles.json` `glossary.json` `translation.json` |
 | 4 | 配音：edge-tts 并发合成（默认 `zh-CN-YunyangNeural`） | `tts/*.wav` `tts.json` |
 | 5 | 对齐：提语速 → AI 精简译文 → atempo 微调 → 有限顺延（画面保持原速） | `timeline.json` |
 | 6 | 拼接：配音轨 + 中文字幕 | `dub.wav` `zh.ass` |
 | 7 | 封面：原封面 + 中文标题 | `cover.zh.jpg` |
-| 8 | 合成：烧录硬字幕、替换音轨、嵌入封面（优先 h264_nvenc） | `<中文标题>.mp4` |
+| 8 | 合成：剪除广告片段、烧录硬字幕、替换音轨、嵌入封面（优先 h264_nvenc） | `<中文标题>.mp4` |
 
 每一步完成后记录到 `state.json`，重跑时自动跳过；修改了相关配置（音色、模型、术语表等）会自动从受影响的步骤重跑。翻译和配音结果有缓存，中断后重跑可以接着做。
 
@@ -179,6 +179,38 @@ uv run ytdub voices --locale zh
 5. 有限顺延：允许本句延后结束、下一句顺延开始，延迟在后续停顿中消化；累计不超过 `max_drift`（1.5s），超出部分继续压缩（≤ `drift_atempo_max` = 1.25）。`max_drift: 0` 即关闭顺延。
 
 字幕时间跟随配音实际播放时间。
+
+## 剪除赞助广告（SponsorBlock）
+
+很多 YouTube 视频中插有赞助商口播、自我推广等片段。下载步骤会查询 [SponsorBlock](https://sponsor.ajay.app) 众包数据库，找到这些片段的时间段并记录到 `meta.json` 的 `cuts`：
+
+- 广告片段内的字幕直接丢弃，不翻译也不配音；
+- 之后各步骤统一使用剪除后的时间轴；
+- 合成时把视频画面中的这些片段剪掉，成品中不再出现。
+
+在 `config.yaml` 中配置要剪除的类别（默认 `[sponsor, selfpromo]`，设为 `[]` 关闭）：
+
+```yaml
+download:
+  sponsorblock: [sponsor, selfpromo]
+```
+
+| 类别 | 含义 |
+|---|---|
+| `sponsor` | 付费赞助、广告口播 |
+| `selfpromo` | 无偿/自我推广（周边、Patreon 等） |
+| `interaction` | 提醒点赞、订阅、关注 |
+| `intro` / `outro` | 片头动画 / 片尾、致谢 |
+| `preview` | 预告、前情回顾 |
+| `filler` | 与主题无关的闲聊 |
+| `hook` | 开场钩子、问候 |
+| `music_offtopic` | 音乐视频中的非音乐部分 |
+
+注意：
+
+- 只有被网友标注过的视频才能剪除，冷门或新发布的视频可能还没有数据；
+- 查询失败（网络问题等）只会警告，不影响后续流程；
+- 修改类别会从下载步骤开始重跑。
 
 ## 使用 MOSS-TTS-Nano 配音（CUDA）
 

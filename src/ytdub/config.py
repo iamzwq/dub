@@ -46,6 +46,9 @@ class DownloadConfig(BaseModel):
     sleep_requests: float = 0.0
     ratelimit: str = ""
     proxy: str = ""
+    # SponsorBlock 众包数据中要剪除的片段类别，空列表表示不剪除
+    sponsorblock: list[str] = Field(default_factory=lambda: ["sponsor", "selfpromo"])
+    sponsorblock_api: str = "https://sponsor.ajay.app"
 
 
 class SegmentConfig(BaseModel):

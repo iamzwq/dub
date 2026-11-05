@@ -6,6 +6,7 @@ import subprocess
 from pathlib import Path
 
 from ..context import Context, StepError
+from ..cuts import keep_ranges
 from ..log import log, percent_progress
 from ..media import pick_encoder, probe
 
@@ -41,13 +42,22 @@ def _video_codec_args(encoder: str, cfg) -> list[str]:
     return ["-c:v:0", "libx264", "-preset", c.x264_preset, "-crf", str(c.x264_crf)]
 
 
-def build_command(video: str, encoder: str, cfg, cover: str | None, output: str = OUTPUT) -> list[str]:
+def build_command(
+    video: str, encoder: str, cfg, cover: str | None, output: str = OUTPUT,
+    keep: list[tuple[float, float]] | None = None,
+) -> list[str]:
     c = cfg.compose
     args = ["ffmpeg", "-hide_banner", "-y", "-nostats", "-loglevel", "error", "-progress", "pipe:1",
             "-i", video, "-i", "dub.wav"]
     if cover:
         args += ["-i", cover]
-    graph = f"[0:v]subtitles=zh.ass,format=yuv420p[v];[1:a]loudnorm={c.loudnorm},aresample=48000[a]"
+    if keep:
+        parts = [f"[0:v]trim=start={a:.3f}:end={b:.3f},setpts=PTS-STARTPTS[k{i}]" for i, (a, b) in enumerate(keep)]
+        labels = "".join(f"[k{i}]" for i in range(len(keep)))
+        src = ";".join(parts) + f";{labels}concat=n={len(keep)}:v=1:a=0[cut];[cut]"
+    else:
+        src = "[0:v]"
+    graph = f"{src}subtitles=zh.ass,format=yuv420p[v];[1:a]loudnorm={c.loudnorm},aresample=48000[a]"
     args += ["-filter_complex", graph, "-map", "[v]", "-map", "[a]"]
     if cover:
         args += ["-map", "2:v"]
@@ -92,19 +102,24 @@ def run(ctx: Context) -> None:
         if not ws.path(name).exists():
             raise StepError(f"缺少 {name}，请先执行拼接步骤")
     duration = probe(video)["duration"]
+    cuts = [tuple(c) for c in (ws.read_json("meta.json") or {}).get("cuts") or []]
+    keep = keep_ranges(cuts, duration) if cuts else None
+    if keep:
+        log.info("剪除 %d 个广告/赞助片段（共 %.1fs）", len(cuts), sum(b - a for a, b in cuts))
+        duration = sum(b - a for a, b in keep)
     cover = "cover.zh.jpg" if ws.path("cover.zh.jpg").exists() else ("cover.jpg" if ws.path("cover.jpg").exists() else None)
 
     output = output_name(ws)
     encoder = pick_encoder(cfg.compose.encoder)
     log.info("编码器：%s；封面：%s；输出文件：%s", encoder, cover or "无", output)
     try:
-        _run_ffmpeg(ctx, build_command(video.name, encoder, cfg, cover, output), duration, f"合成视频（{encoder}）")
+        _run_ffmpeg(ctx, build_command(video.name, encoder, cfg, cover, output, keep), duration, f"合成视频（{encoder}）")
     except RuntimeError as e:
         if encoder == "libx264":
             raise StepError(f"ffmpeg 合成失败：{e}") from e
         log.warning("%s 编码失败，改用 libx264 重试：%s", encoder, str(e).splitlines()[-1] if str(e) else "")
         try:
-            _run_ffmpeg(ctx, build_command(video.name, "libx264", cfg, cover, output), duration, "合成视频（libx264）")
+            _run_ffmpeg(ctx, build_command(video.name, "libx264", cfg, cover, output, keep), duration, "合成视频（libx264）")
         except RuntimeError as e2:
             raise StepError(f"ffmpeg 合成失败：{e2}") from e2
     out = ws.path(output)

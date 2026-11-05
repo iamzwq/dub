@@ -8,6 +8,10 @@ download:
   sleep_requests: 0           # 每次请求间隔秒数，被限流时可设为 1~3
   ratelimit: ""               # 下载限速，如 "5M"
   proxy: ""                   # 如 "http://127.0.0.1:7890"，留空则使用系统环境变量
+  # 通过 SponsorBlock 数据库剪除视频中的广告/赞助等片段，[] 表示不剪除。可选类别：
+  # sponsor 赞助广告、selfpromo 自我推广、interaction 求点赞订阅、intro 片头、outro 片尾、
+  # preview 预告/回顾、filler 离题闲聊、hook 开场钩子、music_offtopic 音乐视频中的非音乐部分
+  sponsorblock: [sponsor, selfpromo]
 
 llm:                          # 任意 OpenAI 兼容接口（/v1/chat/completions）
   base_url: ""                # 如 https://api.example.com/v1；留空则读取 .env 的 LLM_BASE_URL
