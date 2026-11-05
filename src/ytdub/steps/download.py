@@ -21,6 +21,7 @@ def fingerprint(cfg) -> dict:
     fp = {"max_height": cfg.download.max_height, "lang": cfg.source_lang}
     if cfg.download.sponsorblock:
         fp["sponsorblock"] = sorted(cfg.download.sponsorblock)
+        fp["meta"] = 2  # meta["duration"] 改为剪除后的时长
     return fp
 
 
@@ -249,9 +250,9 @@ def _run(ctx: Context) -> None:
     log.info("视频已下载：%s（%dx%d，%.1fs）", video.name, v.get("width", 0), v.get("height", 0), v["duration"])
     cuts = _sponsor_cuts(ctx, info, v["duration"])
     meta["cuts"] = [[a, b] for a, b in cuts]
-    # 下游步骤都使用剪除后的时间轴，duration 为剪除后的时长
-    meta["video"] = {"file": video.name, **v, "source_duration": v["duration"]}
-    meta["video"]["duration"] = round(v["duration"] - sum(b - a for a, b in cuts), 3)
+    meta["video"] = {"file": video.name, **v}
+    # 下游步骤都使用剪除后的时间轴
+    meta["duration"] = round(v["duration"] - sum(b - a for a, b in cuts), 3)
     ws.write_json("meta.json", meta)
 
 

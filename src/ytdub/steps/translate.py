@@ -38,8 +38,6 @@ def fingerprint(cfg) -> dict:
     return {
         "llm": cfg.llm.identity(),
         "cps": t.chars_per_second,
-        "batch": t.batch_size,
-        "ctx": t.context_size,
         "glossary": fp_hash(load_user_glossary(g)) if g.exists() else "",
     }
 
@@ -60,11 +58,11 @@ def slot_seconds(sentences: list[Sentence], i: int, video_duration: float | None
 
 
 def run(ctx: Context) -> None:
-    ws, cfg = ctx.ws, ctx.cfg
+    ws = ctx.ws
     sentences = load_sentences(ctx)
     meta = ws.read_json("meta.json") or {}
     lang = meta.get("language", "en")
-    duration = (meta.get("video") or {}).get("duration") or meta.get("duration")
+    duration = meta.get("duration")
 
     if lang.lower() in _SIMPLIFIED:
         log.info("源语言为简体中文，跳过翻译")

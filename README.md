@@ -1,6 +1,6 @@
 # ytdub — YouTube 视频中文配音工具
 
-下载 YouTube 视频 / 封面 / 字幕（可自动剪除赞助广告）→ AI 断句与翻译（上下文 + 术语表 + 批量）→ edge-tts 中文配音 → 时长对齐 → ffmpeg 烧录中文字幕并合成新视频。
+下载 YouTube 视频 / 封面 / 字幕（可自动剪除赞助广告）→ AI 断句与翻译（上下文 + 术语表 + 批量）→ 中文配音（edge-tts / MOSS-TTS-Nano / 阿里云百炼）→ 时长对齐 → ffmpeg 烧录中文字幕并合成新视频。
 
 ## 流程
 
@@ -9,7 +9,7 @@
 | 1 | 下载：yt-dlp + cookies，优先手动字幕，无则自动字幕，都没有则中断；查询 SponsorBlock 得到要剪除的广告片段 | `meta.json` `video.mp4` `cover.jpg` `subs.src.json3` |
 | 2 | 断句：先去掉广告片段内的字幕；字幕有标点 → 只按句末标点断句（保留完整句子）；无标点 → AI 断句 | `sentences.json` |
 | 3 | 翻译：摘要 + 自动术语 + 用户术语表，带上下文批量翻译，按时长限制字数 | `titles.json` `glossary.json` `translation.json` |
-| 4 | 配音：edge-tts 并发合成（默认 `zh-CN-YunyangNeural`） | `tts/*.wav` `tts.json` |
+| 4 | 配音：并发合成，引擎由 `tts.engine` 选择（默认 edge-tts `zh-CN-YunyangNeural`） | `tts/*.wav` `tts.json` |
 | 5 | 对齐：提语速 → AI 精简译文 → atempo 微调 → 有限顺延（画面保持原速） | `timeline.json` |
 | 6 | 拼接：配音轨 + 中文字幕 | `dub.wav` `zh.ass` |
 | 7 | 封面：原封面 + 中文标题 | `cover.zh.jpg` |
@@ -100,7 +100,7 @@ uv run ytdub voices
 | `--cookies PATH` | cookies.txt 路径（Netscape 格式），用于防限流 | `download.cookies` = `cookies.txt` |
 | `--lang CODE` | 手动指定源语言代码（如 `en`、`ja`、`de`），自动识别失败或想用其他语言字幕时使用 | 自动识别 |
 | `--segment MODE` | 断句方式：`auto`（有标点 → `punct`，无标点 → `ai`）、`punct`（只按句末标点断句）、`ai`（LLM 补标点并断句） | `segment.mode` = `auto` |
-| `--voice NAME` | edge-tts 音色，可用 `ytdub voices` 查看 | `tts.voice` = `zh-CN-YunyangNeural` |
+| `--voice NAME` | 音色：edge 引擎对应 `tts.voice`（可用 `ytdub voices` 查看），dashscope 引擎对应 `tts.dashscope.voice`；moss_nano 不支持 | `tts.voice` = `zh-CN-YunyangNeural` |
 | `--rate RATE` | 基准语速，如 `+10%`、`10`、`-5%` | `tts.rate` = `+5%` |
 | `--from STEP` | 从指定步骤开始强制重跑（该步骤及之后的步骤都会重新执行） | — |
 | `--to STEP` | 执行到指定步骤为止 | 执行到最后一步 |
@@ -115,7 +115,7 @@ uv run ytdub voices
 | `download` | 下载视频 / 封面 / 字幕 |
 | `segment` | 字幕解析与断句 |
 | `translate` | AI 翻译 |
-| `tts` | edge-tts 配音 |
+| `tts` | 配音 |
 | `align` | 时长对齐 |
 | `mix` | 拼接配音轨与字幕 |
 | `cover` | 生成中文封面 |
@@ -173,7 +173,7 @@ uv run ytdub voices --locale zh
 中文配音往往比原文长，按以下顺序处理，画面始终原速：
 
 1. 翻译时按每句可用时长 × `chars_per_second`（默认 4.5 字/秒）限制字数；
-2. 超时则按比例提高 edge-tts 语速（最高 `max_rate` = +30%）；
+2. 超时则按比例提高配音语速（最高 `max_rate` = +30%）；
 3. 仍超时让 LLM 精简译文（最多 `shorten_rounds` 轮）；
 4. 用 atempo 压缩（≤ `atempo_max` = 1.15）；
 5. 有限顺延：允许本句延后结束、下一句顺延开始，延迟在后续停顿中消化；累计不超过 `max_drift`（1.5s），超出部分继续压缩（≤ `drift_atempo_max` = 1.25）。`max_drift: 0` 即关闭顺延。

@@ -4,7 +4,7 @@ from ytdub.steps.mix import _ass_time, subtitle_events
 from ytdub.steps.segment import align_sentences
 from ytdub.subtitles import find_sentence_breaks, parse_json3, parse_vtt, segment_punct
 from ytdub.models import Token
-from ytdub.text import has_punctuation, is_abbreviation_dot, split_display_lines, split_units, strip_display_punct, zh_len
+from ytdub.text import balanced_split, has_punctuation, is_abbreviation_dot, split_units, strip_display_punct, zh_len
 from ytdub.timeline import Clip, schedule
 from ytdub.workspace import parse_video_id
 
@@ -66,10 +66,10 @@ def test_has_punctuation():
 def test_zh_len_and_display_split():
     assert zh_len("你好世界") == 4
     assert zh_len("使用GPT模型") == 4 + 2
-    lines = split_display_lines("今天我们来聊一聊大语言模型的训练方法，以及它在实际工作中的各种应用场景。", 20)
+    lines = balanced_split("今天我们来聊一聊大语言模型的训练方法，以及它在实际工作中的各种应用场景。", 20)
     assert all(len(x) <= 20 for x in lines)
     assert "".join(lines) == "今天我们来聊一聊大语言模型的训练方法，以及它在实际工作中的各种应用场景。"
-    assert strip_display_punct("你好，世界。") == "你好 世界"
+    assert strip_display_punct("你好，世界。") == "你好，世界"
 
 
 # ---------------------------------------------------------------- 断句
@@ -182,7 +182,7 @@ def test_punctuation_detection_ignores_numbers():
     "德国的价格大约是1.234.567,89欧元这个数字非常大的",
 ])
 def test_display_lines_keep_numbers_whole(text):
-    lines = split_display_lines(text, 20)
+    lines = balanced_split(text, 20)
     assert "".join(lines) == text
     import re as _re
     numbers = _re.findall(r"\d[\d,.]*\d", text)
@@ -327,10 +327,11 @@ def test_ass_box_style():
 
     assert ass_color("000000", 0.1) == "&HE6000000"
     assert ass_color("000000", 0.9) == "&H19000000"
+    assert ass_color("000000", 0.6) == "&H66000000"
     assert ass_color("#FF8000", 1.0) == "&H000080FF"
     ass = build_ass([(0.0, 1.0, "你好")], 1280, 720, SubtitleConfig())
     box = next(ln for ln in ass.splitlines() if ln.startswith("Style: Box"))
-    assert box.split(",")[3] == "&H19000000"
+    assert box.split(",")[3] == "&H66000000"
     dialogues = [ln for ln in ass.splitlines() if ln.startswith("Dialogue:")]
     assert len(dialogues) == 2 and r"\p1}m " in dialogues[0] and dialogues[1].endswith("你好")
     ass = build_ass([(0.0, 1.0, "你好")], 1280, 720, SubtitleConfig(box_opacity=0))
@@ -339,13 +340,13 @@ def test_ass_box_style():
 
 def test_display_lines_avoid_short_first_line():
     text = "FreeBSD 的内核和基本系统在同一个仓库里开发，版本号是14.2"
-    lines = split_display_lines(text, 20)
+    lines = balanced_split(text, 20)
     assert "".join(lines).replace(" ", "") == text.replace(" ", "")
     assert all(len(ln) >= 10 for ln in lines[:-1]), lines
 
 
 # ---------------------------------------------------------------- 字幕分屏
-from ytdub.text import balanced_split, display_width, split_screens  # noqa: E402
+from ytdub.text import display_width, split_screens  # noqa: E402
 
 
 def test_short_sentence_one_screen_two_balanced_lines():
@@ -448,6 +449,27 @@ def test_safe_filename_and_output_name(tmp_path):
     cmd = build_command("video.mp4", "libx264", Config(), None, keep=[(0, 10), (20, 30)])
     graph = cmd[cmd.index("-filter_complex") + 1]
     assert "concat=n=2:v=1:a=0[cut];[cut]subtitles=zh.ass" in graph
+
+
+def test_tts_retry_no_sleep_after_last(monkeypatch):
+    import asyncio
+    from ytdub import tts
+
+    sleeps = []
+
+    async def fake_sleep(s):
+        sleeps.append(s)
+
+    monkeypatch.setattr(tts.asyncio, "sleep", fake_sleep)
+    calls = []
+
+    async def fail():
+        calls.append(1)
+        raise ValueError("boom")
+
+    with pytest.raises(RuntimeError, match="boom") as ei:
+        asyncio.run(tts._retry("x", 3, fail))
+    assert len(calls) == 3 and len(sleeps) == 2 and isinstance(ei.value.__cause__, ValueError)
 
 
 def test_cuts_remap():

@@ -266,9 +266,3 @@ def groups_to_sentences(groups: list[list[Token]], lang: str, texts: list[str] |
             continue
         sentences.append(Sentence(id=len(sentences) + 1, start=round(g[0].start, 3), end=round(g[-1].end, 3), text=text))
     return sentences
-
-
-def renumber(sentences: list[Sentence]) -> list[Sentence]:
-    for i, s in enumerate(sentences, 1):
-        s.id = i
-    return sentences

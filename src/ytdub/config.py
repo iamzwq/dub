@@ -122,7 +122,7 @@ class SubtitleConfig(BaseModel):
     max_cps: float = 8.0  # 一行一屏时，该句阅读速度上限（汉字宽/秒），更快则仍一屏多行
     outline: float = 0.0  # 描边宽度，0 表示无描边
     box_color: str = "000000"  # 背景框颜色（RGB 十六进制）
-    box_opacity: float = 0.50  # 背景框不透明度 0~1（0.9 = 透明度 10%），0 表示不加背景框
+    box_opacity: float = 0.6  # 背景框不透明度 0~1（0.9 = 透明度 10%），0 表示不加背景框
     box_padding: float = 0.3  # 背景框内边距 = 字号 × 该比例
     box_radius: float = 0.3  # 背景框圆角半径 = 字号 × 该比例，0 为直角
     char_width: float = 0.855  # 全角字宽 / 字号（用于估算背景框宽度；霞鹜文楷等宽为 1000/1169）

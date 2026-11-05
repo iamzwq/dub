@@ -5,11 +5,11 @@ import asyncio
 
 from ..context import Context, StepError
 from ..log import count_progress, log
-from ..tts import concurrency, synthesize, tts_filename, voice_key
+from ..tts import cache_key, concurrency, synthesize, tts_filename, voice_key
 
 
 def fingerprint(cfg) -> dict:
-    return {"voice": voice_key(cfg.tts), "rate": cfg.tts.rate}
+    return {"tts": cache_key(cfg.tts), "rate": cfg.tts.rate}
 
 
 def load_translation(ctx: Context) -> list[dict]:
@@ -26,17 +26,17 @@ def run(ctx: Context) -> None:
 async def _run(ctx: Context) -> None:
     ws, t = ctx.ws, ctx.cfg.tts
     items = load_translation(ctx)
-    voice, workers = voice_key(t), concurrency(t)
+    workers = concurrency(t)
     sem = asyncio.Semaphore(workers)
     results: dict[int, dict] = {}
     failures: list[str] = []
-    log.info("引擎 %s，音色 %s，语速 %+d%%，并发 %d，共 %d 句", t.engine, voice, t.rate, workers, len(items))
+    log.info("引擎 %s，音色 %s，语速 %+d%%，并发 %d，共 %d 句", t.engine, voice_key(t), t.rate, workers, len(items))
 
     with count_progress() as progress:
         task = progress.add_task("配音", total=len(items), info="")
 
         async def one(item: dict) -> None:
-            name = tts_filename(item["id"], item["zh"], voice, t.rate)
+            name = tts_filename(item["id"], item["zh"], t, t.rate)
             async with sem:
                 try:
                     dur = await synthesize(t, item["zh"], t.rate, ws.tts_dir / name)

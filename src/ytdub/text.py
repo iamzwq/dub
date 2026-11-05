@@ -316,12 +316,6 @@ def split_screens(
     return out
 
 
-def split_display_lines(text: str, max_chars: int) -> list[str]:
-    """把文本切成若干不超过 max_chars 的字幕行（均衡切分）。"""
-    return balanced_split(text, max_chars)
-
-
 def strip_display_punct(line: str) -> str:
-    # line = re.sub(r"[，、；：]", " ", line)
     line = re.sub(r"[。，、；：,.;: ]+([”’」』）)]*)$", r"\1", line)  # 行尾标点（含闭引号前的）
     return re.sub(r" {2,}", " ", line).strip()

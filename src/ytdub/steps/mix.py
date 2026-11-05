@@ -148,7 +148,8 @@ def run(ctx: Context) -> None:
     if video is None:
         raise StepError("未找到下载的视频文件")
     v = meta.get("video") or probe(video)
-    width, height, duration = v.get("width", 1920), v.get("height", 1080), v["duration"]
+    width, height = v.get("width", 1920), v.get("height", 1080)
+    duration = meta.get("duration") or v["duration"]
 
     # 字幕
     max_chars = max_chars_for(width, height, cfg.subtitle)

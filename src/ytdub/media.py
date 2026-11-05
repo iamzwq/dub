@@ -16,7 +16,9 @@ from .log import log
 def require_tools() -> None:
     missing = [t for t in ("ffmpeg", "ffprobe") if shutil.which(t) is None]
     if missing:
-        raise RuntimeError(f"未找到 {', '.join(missing)}，请先安装 ffmpeg 并加入 PATH")
+        from .context import StepError
+
+        raise StepError(f"未找到 {', '.join(missing)}，请先安装 ffmpeg 并加入 PATH")
 
 
 def probe(path: Path) -> dict:

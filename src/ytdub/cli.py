@@ -14,7 +14,7 @@ from .llm import LLMError
 from .log import console, log, setup_logging
 from .workspace import STEPS
 
-app = typer.Typer(add_completion=False, help="YouTube 视频 → AI 中文翻译 → edge-tts 配音 → 合成新视频")
+app = typer.Typer(add_completion=False, help="YouTube 视频 → AI 中文翻译 → 中文配音 → 合成新视频")
 
 
 def _check_step(value: Optional[str]) -> Optional[str]:
@@ -27,7 +27,7 @@ def _check_step(value: Optional[str]) -> Optional[str]:
 def run(
     url: str = typer.Argument(..., help="YouTube 视频 URL 或 11 位视频 ID"),
     config: Optional[Path] = typer.Option(None, "--config", "-c", help="配置文件，默认 ./config.yaml"),
-    voice: Optional[str] = typer.Option(None, "--voice", help="edge-tts 音色，默认 zh-CN-YunyangNeural"),
+    voice: Optional[str] = typer.Option(None, "--voice", help="音色：edge 引擎如 zh-CN-YunyangNeural，dashscope 引擎如 longanhuan_v3.1"),
     rate: Optional[str] = typer.Option(None, "--rate", help="基准语速，如 +5%"),
     segment: Optional[str] = typer.Option(None, "--segment", help="断句方式：auto | punct（按句末标点）| ai"),
     lang: Optional[str] = typer.Option(None, "--lang", help="手动指定源语言代码，如 en / ja"),
@@ -41,7 +41,12 @@ def run(
     try:
         cfg = load_config(config)
         if voice:
-            cfg.tts.voice = voice
+            if cfg.tts.engine == "dashscope":
+                cfg.tts.dashscope.voice = voice
+            elif cfg.tts.engine == "moss_nano":
+                raise typer.BadParameter("moss_nano 引擎不支持 --voice，请在 config.yaml 的 tts.moss 中设置 prompt_audio 或 demo_id")
+            else:
+                cfg.tts.voice = voice
         if rate:
             cfg.tts.rate = parse_rate(rate)
         if segment:

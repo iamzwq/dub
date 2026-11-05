@@ -13,14 +13,14 @@ from ..models import Sentence
 from ..prompts import SHORTEN_SYSTEM
 from ..text import zh_len
 from ..timeline import Clip, schedule
-from ..tts import concurrency, synthesize, tts_filename, voice_key, wav_duration
+from ..tts import cache_key, concurrency, synthesize, tts_filename, wav_duration
 from .translate import load_sentences, slot_seconds
 
 
 def fingerprint(cfg) -> dict:
     return {
         "align": cfg.align.model_dump(),
-        "voice": voice_key(cfg.tts),
+        "tts": cache_key(cfg.tts),
         "rate": cfg.tts.rate,
         "max_rate": cfg.tts.max_rate,
         "llm": cfg.llm.identity() if cfg.align.shorten_rounds else "",
@@ -50,7 +50,7 @@ async def _run(ctx: Context) -> None:
     if len(tts_items) != len(sentences):
         raise StepError("tts.json 与 sentences.json 不一致，请重跑配音步骤")
     meta = ws.read_json("meta.json") or {}
-    video_duration = (meta.get("video") or {}).get("duration") or meta.get("duration")
+    video_duration = meta.get("duration")
 
     entries: list[dict] = []
     for i, s in enumerate(sentences):
@@ -73,10 +73,9 @@ async def _run(ctx: Context) -> None:
             log.warning("未配置 LLM，跳过精简译文：%s", e)
 
     sem = asyncio.Semaphore(concurrency(t))
-    voice = voice_key(t)
 
     async def synth(e: dict, text: str, rate: int) -> tuple[str, float]:
-        name = tts_filename(e["id"], text, voice, rate)
+        name = tts_filename(e["id"], text, t, rate)
         async with sem:
             dur = await synthesize(t, text, rate, ws.tts_dir / name)
         return name, dur

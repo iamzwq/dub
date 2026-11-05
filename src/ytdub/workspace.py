@@ -13,7 +13,7 @@ STEP_TITLES = {
     "download": "下载视频/封面/字幕",
     "segment": "字幕解析与断句",
     "translate": "AI 翻译",
-    "tts": "edge-tts 配音",
+    "tts": "配音",
     "align": "时长对齐",
     "mix": "拼接配音轨与字幕",
     "cover": "生成中文封面",
@@ -60,10 +60,6 @@ class Workspace:
     @property
     def tts_dir(self) -> Path:
         return self.dir / "tts"
-
-    @property
-    def state_file(self) -> Path:
-        return self.dir / "state.json"
 
     # ---- JSON 读写 ----
     def read_json(self, name: str, default: Any = None) -> Any:
