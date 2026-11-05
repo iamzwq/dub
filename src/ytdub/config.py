@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Literal
 
 import yaml
 from dotenv import load_dotenv
@@ -45,6 +46,9 @@ class DownloadConfig(BaseModel):
     sleep_requests: float = 0.0
     ratelimit: str = ""
     proxy: str = ""
+    # SponsorBlock 众包数据中要剪除的片段类别，空列表表示不剪除
+    sponsorblock: list[str] = Field(default_factory=lambda: ["sponsor", "selfpromo"])
+    sponsorblock_api: str = "https://sponsor.ajay.app"
 
 
 class SegmentConfig(BaseModel):
@@ -61,7 +65,34 @@ class TranslateConfig(BaseModel):
     glossary: str = "glossary.yaml"
 
 
+class MossNanoConfig(BaseModel):
+    """MOSS-TTS-Nano ONNX 服务（app_onnx.py）的 /api/generate 接口。"""
+
+    url: str = "http://127.0.0.1:18083"
+    prompt_audio: str = ""  # 本机参考音频（音色克隆），留空则使用服务端示例音色 demo_id
+    demo_id: str = "demo-1"
+    seed: int = 1234  # 固定种子使结果可复现；0 表示随机
+    max_new_frames: int = 375  # 12.5 帧/秒，375 ≈ 30 秒
+    concurrency: int = 2  # 服务端串行推理，并发过高只会排队超时
+    timeout: float = 300
+
+
+class DashScopeConfig(BaseModel):
+    """阿里云百炼语音合成（dashscope tts_v2 WebSocket）。api_key 留空则读环境变量 DASHSCOPE_API_KEY。"""
+
+    api_key: str = ""
+    url: str = ""  # WebSocket 地址，留空用 SDK 默认（wss://dashscope.aliyuncs.com/api-ws/v1/inference）
+    model: str = "qwen-audio-3.1-tts-flash"
+    voice: str = "longanhuan_v3.1"
+    concurrency: int = 4
+    timeout: float = 60
+
+    def resolved_api_key(self) -> str:
+        return (self.api_key or os.environ.get("DASHSCOPE_API_KEY", "")).strip()
+
+
 class TTSConfig(BaseModel):
+    engine: Literal["edge", "moss_nano", "dashscope"] = "edge"
     voice: str = "zh-CN-YunyangNeural"
     rate: int = 5
     max_rate: int = 30
@@ -69,6 +100,8 @@ class TTSConfig(BaseModel):
     retries: int = 3
     trim_silence_db: float = -45.0
     proxy: str = ""
+    moss: MossNanoConfig = Field(default_factory=MossNanoConfig)
+    dashscope: DashScopeConfig = Field(default_factory=DashScopeConfig)
 
 
 class AlignConfig(BaseModel):

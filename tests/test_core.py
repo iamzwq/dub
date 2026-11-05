@@ -435,3 +435,22 @@ def test_safe_filename_and_output_name(tmp_path):
     ws.write_json("titles.json", {"zh_title": "a|b"})
     assert output_name(ws) == "a b.mp4"
     assert build_command("video.mp4", "libx264", Config(), None, "a b.mp4")[-1] == "a b.mp4"
+    cmd = build_command("video.mp4", "libx264", Config(), None, keep=[(0, 10), (20, 30)])
+    graph = cmd[cmd.index("-filter_complex") + 1]
+    assert "concat=n=2:v=1:a=0[cut];[cut]subtitles=zh.ass" in graph
+
+
+def test_cuts_remap():
+    from ytdub.cuts import keep_ranges, map_time, merge_ranges, remap_tokens
+    from ytdub.models import Token
+
+    cuts = merge_ranges([(30, 40), (10, 20), (15, 25), (99, 120), (50, 50.05)], 100)
+    assert cuts == [(10, 25), (30, 40), (99, 100)]
+    assert keep_ranges(cuts, 100) == [(0, 10), (25, 30), (40, 99)]
+    assert map_time(5, cuts) == 5
+    assert map_time(12, cuts) == 10
+    assert map_time(27, cuts) == 12
+    assert map_time(45, cuts) == 20
+    toks = [Token("a", 8, 11), Token("b", 12, 14), Token("c", 26, 28), Token("d", 39, 42)]
+    out = remap_tokens(toks, cuts)
+    assert [(t.text, t.start, t.end) for t in out] == [("a", 8, 10), ("c", 11, 13), ("d", 15, 17)]

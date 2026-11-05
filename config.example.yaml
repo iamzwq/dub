@@ -8,6 +8,10 @@ download:
   sleep_requests: 0           # 每次请求间隔秒数，被限流时可设为 1~3
   ratelimit: ""               # 下载限速，如 "5M"
   proxy: ""                   # 如 "http://127.0.0.1:7890"，留空则使用系统环境变量
+  # 通过 SponsorBlock 数据库剪除视频中的广告/赞助等片段，[] 表示不剪除。可选类别：
+  # sponsor 赞助广告、selfpromo 自我推广、interaction 求点赞订阅、intro 片头、outro 片尾、
+  # preview 预告/回顾、filler 离题闲聊、hook 开场钩子、music_offtopic 音乐视频中的非音乐部分
+  sponsorblock: [sponsor, selfpromo]
 
 llm:                          # 任意 OpenAI 兼容接口（/v1/chat/completions）
   base_url: ""                # 如 https://api.example.com/v1；留空则读取 .env 的 LLM_BASE_URL
@@ -36,11 +40,23 @@ translate:
   glossary: glossary.yaml     # 用户术语表（优先级高于自动术语）
 
 tts:
-  voice: zh-CN-YunyangNeural
-  rate: 5                     # 基准语速 +5%
+  engine: edge               # edge（edge-tts，在线）| moss_nano（MOSS-TTS-Nano 服务，可用 CUDA）| dashscope（阿里云百炼）
+  voice: zh-CN-YunyangNeural  # 仅 edge
+  rate: 5                     # 基准语速 +5%（moss_nano 用 atempo 实现）
   max_rate: 30                # 超时时最多提速到 +30%
-  concurrency: 6
+  concurrency: 6              # 仅 edge
   proxy: ""                   # edge-tts 代理，如 "http://127.0.0.1:7890"
+  moss:                       # engine: moss_nano 时使用，服务启动方式见 README
+    url: http://127.0.0.1:18083   # 服务与 ytdub 在同一台电脑；在其他电脑时填其局域网 IP
+    prompt_audio: ""          # 本机参考音频（克隆音色，建议 5~15 秒干净人声）；留空则用 demo_id
+    demo_id: demo-1           # 服务端内置示例音色，对应 MOSS-TTS-Nano/assets/demo.jsonl 第 N 行
+    seed: 1234                # 固定种子使结果可复现，0 = 随机
+    concurrency: 2
+  dashscope:                  # engine: dashscope 时使用，API Key 放 .env 的 DASHSCOPE_API_KEY
+    url: ""                   # WebSocket 地址，留空用默认；专属部署填如 wss://ws-xxx.cn-beijing.maas.aliyuncs.com/api-ws/v1/inference
+    model: qwen-audio-3.1-tts-flash
+    voice: longanhuan_v3.1
+    concurrency: 4
 
 align:
   shorten_rounds: 2           # 超时时让 LLM 精简译文的最大轮数，0 关闭

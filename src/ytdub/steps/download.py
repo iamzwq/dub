@@ -8,6 +8,7 @@ from pathlib import Path
 from PIL import Image
 
 from ..context import Context, StepError
+from ..cuts import merge_ranges
 from ..log import bytes_progress, log
 from ..media import probe
 from ..subtitles import parse_json3, parse_vtt
@@ -17,7 +18,10 @@ SUB_EXTS = ("json3", "vtt")
 
 
 def fingerprint(cfg) -> dict:
-    return {"max_height": cfg.download.max_height, "lang": cfg.source_lang}
+    fp = {"max_height": cfg.download.max_height, "lang": cfg.source_lang}
+    if cfg.download.sponsorblock:
+        fp["sponsorblock"] = sorted(cfg.download.sponsorblock)
+    return fp
 
 
 class _YdlLogger:
@@ -242,6 +246,43 @@ def _run(ctx: Context) -> None:
     if video is None:
         raise StepError("视频下载失败：未找到输出文件")
     v = probe(video)
-    meta["video"] = {"file": video.name, **v}
-    ws.write_json("meta.json", meta)
     log.info("视频已下载：%s（%dx%d，%.1fs）", video.name, v.get("width", 0), v.get("height", 0), v["duration"])
+    cuts = _sponsor_cuts(ctx, info, v["duration"])
+    meta["cuts"] = [[a, b] for a, b in cuts]
+    # 下游步骤都使用剪除后的时间轴，duration 为剪除后的时长
+    meta["video"] = {"file": video.name, **v, "source_duration": v["duration"]}
+    meta["video"]["duration"] = round(v["duration"] - sum(b - a for a, b in cuts), 3)
+    ws.write_json("meta.json", meta)
+
+
+def _sponsor_cuts(ctx: Context, info: dict, duration: float) -> list[tuple[float, float]]:
+    cats = ctx.cfg.download.sponsorblock
+    if not cats:
+        return []
+    import yt_dlp
+    from yt_dlp.postprocessor import SponsorBlockPP
+
+    unknown = [c for c in cats if c not in SponsorBlockPP.CATEGORIES]
+    if unknown:
+        raise StepError(f"未知的 SponsorBlock 类别：{', '.join(unknown)}（可选：{', '.join(SponsorBlockPP.CATEGORIES)}）")
+    try:
+        with yt_dlp.YoutubeDL(_base_opts(ctx)) as ydl:
+            pp = SponsorBlockPP(ydl, cats, ctx.cfg.download.sponsorblock_api)
+            _, res = pp.run({"id": info["id"], "extractor_key": info.get("extractor_key") or "Youtube", "duration": duration})
+    except Exception as e:  # noqa: BLE001
+        log.warning("查询 SponsorBlock 失败，不剪除广告片段：%s", e)
+        return []
+    chapters = [c for c in res.get("sponsorblock_chapters") or [] if c.get("type") == "skip" and c["category"] in cats]
+    cuts = merge_ranges([(float(c["start_time"]), float(c["end_time"])) for c in chapters], duration)
+    if not cuts:
+        log.info("SponsorBlock：未找到需要剪除的片段")
+        return []
+    for c in sorted(chapters, key=lambda c: c["start_time"]):
+        log.info("SponsorBlock：剪除 %s %s–%s", c["title"], _hms(c["start_time"]), _hms(c["end_time"]))
+    log.info("共剪除 %d 段，%.1fs", len(cuts), sum(b - a for a, b in cuts))
+    return cuts
+
+
+def _hms(t: float) -> str:
+    m, s = divmod(int(t), 60)
+    return f"{m // 60}:{m % 60:02d}:{s:02d}" if m >= 60 else f"{m}:{s:02d}"

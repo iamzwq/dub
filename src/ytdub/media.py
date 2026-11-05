@@ -87,8 +87,7 @@ def trim_silence(data: np.ndarray, sr: int, threshold_db: float = -45.0, pad: fl
     return data[start:end]
 
 
-def atempo(src: Path, dst: Path, tempo: float) -> None:
-    """不变调地加速音频（tempo>1 变快）。"""
+def atempo_filter(tempo: float) -> str:
     filters = []
     t = tempo
     while t > 2.0:
@@ -98,7 +97,12 @@ def atempo(src: Path, dst: Path, tempo: float) -> None:
         filters.append("atempo=0.5")
         t /= 0.5
     filters.append(f"atempo={t:.4f}")
-    run_ffmpeg(["-i", str(src), "-filter:a", ",".join(filters), str(dst)])
+    return ",".join(filters)
+
+
+def atempo(src: Path, dst: Path, tempo: float) -> None:
+    """不变调地加速音频（tempo>1 变快）。"""
+    run_ffmpeg(["-i", str(src), "-filter:a", atempo_filter(tempo), str(dst)])
 
 
 @functools.lru_cache(maxsize=4)
