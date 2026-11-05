@@ -30,7 +30,7 @@ llm:                          # 任意 OpenAI 兼容接口（/v1/chat/completion
 segment:
   mode: auto                  # auto：有标点 → 按句末标点断句（punct），无标点 → AI 断句（ai）
   max_gap_seconds: 3          # punct：超过该时长的静音处也断开，避免跨越长空白合并；0 关闭
-  max_sentence_seconds: 15    # 仅 AI 断句：单句最长秒数（同时决定提示词中的单句词数上限）
+  max_sentence_seconds: 15    # 单句最长秒数：punct 下标点优先，超出时再按停顿/从句边界拆分；AI 断句时同时决定提示词中的单句词数上限
   ai_chunk_words: 250
 
 translate:

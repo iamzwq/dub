@@ -85,10 +85,9 @@ llm:
 
 ```powershell
 uv run ytdub run "https://www.youtube.com/watch?v=VIDEO_ID"
-uv run ytdub voices
 ```
 
-也可以写成 `uv run python -m ytdub ...`。查看帮助：`uv run ytdub --help`、`uv run ytdub run --help`。
+查看帮助：`uv run ytdub --help`。
 
 ### `ytdub run <URL>` — 执行完整流程
 
@@ -99,10 +98,10 @@ uv run ytdub voices
 | `-c, --config PATH` | 指定配置文件 | `./config.yaml`（不存在则全部用默认值） |
 | `--cookies PATH` | cookies.txt 路径（Netscape 格式），用于防限流 | `download.cookies` = `cookies.txt` |
 | `--lang CODE` | 手动指定源语言代码（如 `en`、`ja`、`de`），自动识别失败或想用其他语言字幕时使用 | 自动识别 |
-| `--segment MODE` | 断句方式：`auto`（有标点 → `punct`，无标点 → `ai`）、`punct`（只按句末标点断句）、`ai`（LLM 补标点并断句） | `segment.mode` = `auto` |
+| `--segment MODE` | 断句方式：`auto`（有标点 → `punct`，无标点 → `ai`）、`punct`（按句末标点断句，单句超出 `segment.max_sentence_seconds` 时再按停顿/从句边界拆分）、`ai`（LLM 补标点并断句） | `segment.mode` = `auto` |
 | `--voice NAME` | 音色：edge 引擎对应 `tts.voice`（可用 `ytdub voices` 查看），dashscope 引擎对应 `tts.dashscope.voice`；moss_nano 不支持 | `tts.voice` = `zh-CN-YunyangNeural` |
 | `--rate RATE` | 基准语速，如 `+10%`、`10`、`-5%` | `tts.rate` = `+5%` |
-| `--from STEP` | 从指定步骤开始强制重跑（该步骤及之后的步骤都会重新执行） | — |
+| `--from STEP` | 从指定步骤开始强制重跑（该步骤及之后的步骤都会重新执行），参考下方 `STEP` 可选值 | — |
 | `--to STEP` | 执行到指定步骤为止 | 执行到最后一步 |
 | `-v, --verbose` | 终端显示调试日志（`run.log` 始终记录完整日志） | 关闭 |
 

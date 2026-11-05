@@ -130,12 +130,20 @@ def clean_caption_text(text: str) -> str:
     return re.sub(r"[ \t\r\n]+", " ", text).strip()
 
 
-def _inseparable(s: str, k: int) -> bool:
+_ASCII_JOINERS = "._-/\\@#"
+
+
+def inseparable(s: str, k: int) -> bool:
     """在 s[k-1] 与 s[k] 之间断行是否会拆开英文单词或数字（含 1,234,567 这类分隔符）。"""
     if not 0 < k < len(s):
         return False
     a, b = s[k - 1], s[k]
     if a.isascii() and a.isalnum() and b.isascii() and b.isalnum():
+        return True
+    # 文件名、路径、标识符内部的连接符：CLAUDE.md、foo_bar、a-b、src/app
+    if a in _ASCII_JOINERS and b.isascii() and b.isalnum() and k >= 2 and s[k - 2].isascii() and s[k - 2].isalnum():
+        return True
+    if b in _ASCII_JOINERS and a.isascii() and a.isalnum() and k + 1 < len(s) and s[k + 1].isascii() and s[k + 1].isalnum():
         return True
     return in_number(s, k - 1) or in_number(s, k)
 
@@ -144,7 +152,7 @@ def _inseparable(s: str, k: int) -> bool:
 _LINE_START_FORBIDDEN = SENT_END + CLAUSE_PUNCT + CLOSERS + "》〉"  # 不能出现在行首
 _LINE_START_PARTICLES = set("的了着过里们吗呢吧啊呀么地得上中下内外")  # 依附于前一个词的单字，尽量不放在行首
 _LINE_END_FORBIDDEN = "“‘「『（(【《〈"  # 不能留在行尾
-_ZH_CONJUNCTIONS = {
+ZH_CONJUNCTIONS = {
     "所以", "但是", "但", "因为", "而且", "如果", "然后", "以及", "并且", "或者", "不过", "可是", "于是",
     "因此", "同时", "而", "还是", "就是", "比如", "例如", "甚至", "否则", "虽然", "即使", "只要", "只有",
     "除非", "无论", "不管", "尤其是", "也就是说", "换句话说",
@@ -188,7 +196,7 @@ def _word_boundaries(text: str) -> tuple[set[int], set[int]]:
     conj: set[int] = set()
     pos = 0
     for word in _jieba.cut(text):
-        if word in _ZH_CONJUNCTIONS:
+        if word in ZH_CONJUNCTIONS:
             conj.add(pos)
         pos += len(word)
         bounds.add(pos)
@@ -197,7 +205,7 @@ def _word_boundaries(text: str) -> tuple[set[int], set[int]]:
 
 def _cut_weight(s: str, k: int, bounds: set[int], conj: set[int]) -> float | None:
     """在 s[k-1] 与 s[k] 之间断开的优先级；None 表示不允许在此断开。"""
-    if not 0 < k < len(s) or _inseparable(s, k):
+    if not 0 < k < len(s) or inseparable(s, k):
         return None
     a, b = s[k - 1], s[k]
     if b in _LINE_START_FORBIDDEN or a in _LINE_END_FORBIDDEN:
@@ -250,7 +258,7 @@ def balanced_split(text: str, cap: float) -> list[str]:
         if best:
             break
     if best is None:  # 没有合法断点（如一个超长英文单词）：在最接近理想位置处硬切
-        k = min(range(1, len(text)), key=lambda i: (_inseparable(text, i), abs(prefix[i] - ideal)))
+        k = min(range(1, len(text)), key=lambda i: (inseparable(text, i), abs(prefix[i] - ideal)))
     else:
         k = best[1]
     return balanced_split(text[:k], cap) + balanced_split(text[k:], cap)

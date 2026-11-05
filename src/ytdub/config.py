@@ -54,7 +54,7 @@ class DownloadConfig(BaseModel):
 class SegmentConfig(BaseModel):
     mode: str = "auto"  # auto | punct | ai
     max_gap_seconds: float = 3.0  # punct：超过该时长的静音也断开，0 关闭
-    max_sentence_seconds: float = 15.0  # 仅 AI 断句使用
+    max_sentence_seconds: float = 15.0  # 单句最长秒数：punct 超出时按停顿/从句边界再拆；AI 断句也用于提示词
     ai_chunk_words: int = 250
 
 

@@ -93,6 +93,60 @@ def test_punct_segment_keeps_long_sentences_whole():
     assert sents[0].end - sents[0].start > 19
 
 
+def test_punct_segment_splits_over_max_seconds():
+    toks = [Token(f"w{i}" + ("," if i % 5 == 4 else ""), i * 0.5, i * 0.5 + 0.4) for i in range(40)]
+    toks[-1].text += "."
+    sents = segment_punct(toks, "en", max_seconds=8)
+    assert len(sents) > 1
+    assert all(s.end - s.start <= 8 for s in sents)
+    assert all(s.text.endswith((",", ".")) for s in sents)  # 在逗号处拆分
+    by_text = {t.text: t for t in toks}
+    for s in sents:  # 保留原始 token 时间戳
+        first, last = s.text.split()[0], s.text.split()[-1]
+        assert s.start == by_text[first].start and s.end == by_text[last].end
+
+
+def test_punct_segment_short_sentence_not_split_by_max_seconds():
+    toks = _tokens([("Hello there, my friend.", 0, 3)])
+    assert len(segment_punct(toks, "en", max_seconds=8)) == 1
+
+
+def test_punct_segment_splits_at_pause_without_comma():
+    # 无逗号，第 12 个词前有 1 秒停顿
+    toks = [Token(f"w{i}", i * 0.6 + (1.0 if i >= 12 else 0), i * 0.6 + 0.5 + (1.0 if i >= 12 else 0)) for i in range(25)]
+    toks[-1].text += "."
+    sents = segment_punct(toks, "en", max_seconds=10)
+    assert len(sents) == 2
+    assert sents[1].text.startswith("w12")
+    assert sents[0].end == toks[11].end and sents[1].start == toks[12].start
+
+
+def test_punct_segment_no_tiny_fragments():
+    # 句首逗号 + 长停顿不应拆出「Well,」这样的碎片
+    toks = [Token("Well,", 0, 0.4)] + [Token(f"w{i}", 1.5 + i * 0.5, 1.9 + i * 0.5) for i in range(36)]
+    toks[-1].text += "."
+    sents = segment_punct(toks, "en", max_seconds=10)
+    assert len(sents) > 1
+    assert all(s.end - s.start >= 3 for s in sents)
+
+
+def test_punct_segment_splits_cjk_at_clause_and_keeps_words():
+    toks = _tokens([
+        ("今天我们要讨论Claude", 0, 4), ("的各种用法，", 4, 8),
+        ("然后再看看1234个", 8, 12), ("实际的例子。", 12, 16),
+    ])
+    sents = segment_punct(toks, "zh", max_seconds=10)
+    assert [s.text for s in sents] == ["今天我们要讨论Claude的各种用法，", "然后再看看1234个实际的例子。"]
+    assert sents[0].end == 8 and sents[1].start == 8
+
+
+def test_display_keeps_filenames_whole():
+    for cap in (8, 10, 12):
+        lines = balanced_split("请查看CLAUDE.md文件中的说明和src/app_main.py配置", cap)
+        joined = "\n".join(lines)
+        assert "CLAUDE.md" in joined and "src/app_main.py" in joined, lines
+
+
 def test_punct_segment_abbreviations_and_quotes():
     toks = _tokens([('Mr. Smith said "yes." Then', 0, 3), ("he left.", 3, 4)])
     sents = segment_punct(toks, "en")

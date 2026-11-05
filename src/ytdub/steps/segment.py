@@ -16,9 +16,9 @@ from ..text import has_punctuation, is_no_space, join_tokens, lang_name, split_u
 
 def fingerprint(cfg) -> dict:
     s = cfg.segment
-    fp = {"v": 2, "mode": s.mode, "gap": s.max_gap_seconds}
+    fp = {"v": 3, "mode": s.mode, "gap": s.max_gap_seconds, "max": s.max_sentence_seconds}
     if s.mode != "punct":
-        fp.update({"llm": cfg.llm.identity(), "chunk": s.ai_chunk_words, "max": s.max_sentence_seconds})
+        fp.update({"llm": cfg.llm.identity(), "chunk": s.ai_chunk_words})
     return fp
 
 
@@ -50,7 +50,7 @@ def run(ctx: Context) -> None:
     )
 
     if mode == "punct":
-        sentences = segment_punct(tokens, lang, cfg.max_gap_seconds)
+        sentences = segment_punct(tokens, lang, cfg.max_gap_seconds, cfg.max_sentence_seconds)
     else:
         try:
             llm = ctx.llm()

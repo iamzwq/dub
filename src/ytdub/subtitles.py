@@ -10,7 +10,9 @@ from .text import (
     QUOTE_CLOSE,
     QUOTE_OPEN,
     SENT_END,
+    ZH_CONJUNCTIONS,
     clean_caption_text,
+    inseparable,
     is_abbreviation_dot,
     is_no_space,
     join_tokens,
@@ -109,12 +111,15 @@ def _straight_quote_kind(text: str, i: int) -> str | None:
     return None
 
 
-def _flatten(tokens: list[Token], lang: str, max_gap: float) -> tuple[str, list[tuple[float, float]], set[int]]:
-    """把 token 拼成一段文本，记录每个字符的时间（token 内按字符数线性分配）和长静音处的强制断点。"""
+def _flatten(
+    tokens: list[Token], lang: str, max_gap: float
+) -> tuple[str, list[tuple[float, float]], set[int], set[int]]:
+    """把 token 拼成一段文本，记录每个字符的时间（token 内按字符数线性分配）、长静音处的强制断点和各 token 的起始位置。"""
     sep = "" if is_no_space(lang) else " "
     chars: list[str] = []
     times: list[tuple[float, float]] = []
     hard: set[int] = set()
+    starts: set[int] = set()
     for k, tok in enumerate(tokens):
         if k > 0:
             prev = tokens[k - 1]
@@ -123,11 +128,12 @@ def _flatten(tokens: list[Token], lang: str, max_gap: float) -> tuple[str, list[
             if sep:
                 chars.append(sep)
                 times.append((prev.end, prev.end))
+        starts.add(len(chars))
         step = (tok.end - tok.start) / max(len(tok.text), 1)
         for j, ch in enumerate(tok.text):
             chars.append(ch)
             times.append((tok.start + step * j, tok.start + step * (j + 1)))
-    return "".join(chars), times, hard
+    return "".join(chars), times, hard, starts
 
 
 def find_sentence_breaks(
@@ -209,19 +215,89 @@ def find_sentence_breaks(
     return breaks
 
 
-def segment_punct(tokens: list[Token], lang: str, max_gap: float = 0.0) -> list[Sentence]:
-    """有标点的字幕：只按句末标点断句，保留完整句子（含引号内的完整引语），不按时长切分。"""
-    text, times, hard = _flatten(tokens, lang, max_gap)
+_WORD_RE = re.compile(r"\S+")
+_ZH_CONJ_MULTI = tuple(c for c in ZH_CONJUNCTIONS if len(c) > 1)  # 单字连词（而、但）易误中「而言」等词
+MIN_PIECE_RATIO = 0.3  # 拆分后每段至少占 max_seconds 的比例，避免拆出过短的碎片
+
+
+def _trim(text: str, a: int, b: int) -> tuple[int, int]:
+    while a < b and text[a].isspace():
+        a += 1
+    while b > a and text[b - 1].isspace():
+        b -= 1
+    return a, b
+
+
+def _split_by_time(
+    text: str, times: list[tuple[float, float]], starts: set[int], lang: str, a: int, b: int, max_seconds: float
+) -> list[tuple[int, int]]:
+    """
+    句子超过 max_seconds 时，在停顿、从句边界（逗号/分号、连词前）处递归二分；
+    优先选 token 边界（时间戳为原始值，token 内部是按字符数估算的），且每段不短于 MIN_PIECE_RATIO * max_seconds。
+    """
+    a, b = _trim(text, a, b)
+    if b <= a:
+        return []
+    t0, t1 = times[a][0], times[b - 1][1]
+    dur = t1 - t0
+    if max_seconds <= 0 or dur <= max_seconds:
+        return [(a, b)]
+    spaced = not is_no_space(lang)
+    mid = t0 + dur / 2
+    min_piece = max_seconds * MIN_PIECE_RATIO
+    best: tuple[float, int] | None = None
+    for k in range(a + 1, b):
+        if text[k].isspace() or inseparable(text, k):
+            continue
+        p = k - 1
+        while p > a and text[p].isspace():
+            p -= 1
+        prev = text[p]
+        if times[p][1] - t0 < min_piece or t1 - times[k][0] < min_piece:
+            continue
+        clause = prev in CLAUSE_PUNCT or prev in SENT_END
+        at_token = k in starts
+        if spaced:
+            if not text[k - 1].isspace():
+                continue
+        elif not (clause or at_token):
+            continue
+        if prev in QUOTE_OPEN:
+            continue
+        score = 3.0 if clause else 0.0
+        if at_token:
+            score += 1.5
+        if spaced:
+            word = _WORD_RE.match(text, k).group().lower().strip(",.;:!?\"'")
+            if word in _CONJUNCTIONS:
+                score += 2
+        elif text.startswith(_ZH_CONJ_MULTI, k):
+            score += 2
+        score += min(max(times[k][0] - times[p][1], 0.0), 1.5) * 4
+        score -= abs(times[k][0] - mid) / dur * 6
+        if best is None or score > best[0]:
+            best = (score, k)
+    if best is None:
+        return [(a, b)]
+    k = best[1]
+    return _split_by_time(text, times, starts, lang, a, k, max_seconds) + _split_by_time(
+        text, times, starts, lang, k, b, max_seconds
+    )
+
+
+def segment_punct(
+    tokens: list[Token], lang: str, max_gap: float = 0.0, max_seconds: float = 0.0
+) -> list[Sentence]:
+    """
+    有标点的字幕：标点优先，按句末标点断句（含引号内的完整引语）；
+    单句超过 max_seconds（>0）时再按停顿和从句边界拆分，每段沿用原始字符时间戳。
+    """
+    text, times, hard, starts = _flatten(tokens, lang, max_gap)
     sentences: list[Sentence] = []
     prev = 0
     for b in find_sentence_breaks(text, lang, times, hard):
-        span = text[prev:b]
-        lead = len(span) - len(span.lstrip())
-        trail = len(span.rstrip())
-        if span.strip():
-            start = times[prev + lead][0]
-            end = times[prev + trail - 1][1]
-            sentences.append(Sentence(len(sentences) + 1, round(start, 3), round(end, 3), span.strip()))
+        for s, e in _split_by_time(text, times, starts, lang, prev, b, max_seconds):
+            sentences.append(Sentence(len(sentences) + 1, round(times[s][0], 3), round(times[e - 1][1], 3), text[s:e]))
         prev = b
     return sentences
 
